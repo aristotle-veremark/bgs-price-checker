@@ -1,0 +1,2552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BGS Price Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #040848;
+    --surface: #0a1260;
+    --surface2: #0f1a7a;
+    --surface3: #162494;
+    --border: rgba(45,142,255,0.22);
+    --border2: rgba(45,142,255,0.45);
+    --text: #ffffff;
+    --text-muted: rgba(255,255,255,0.62);
+    --text-dim: rgba(255,255,255,0.32);
+    --accent: #2D8EFF;
+    --accent-hover: #5aaeff;
+    --green: #2ecc71;
+    --green-bg: rgba(46,204,113,0.12);
+    --red: #ff5c5c;
+    --red-bg: rgba(255,92,92,0.12);
+    --amber: #f5a623;
+    --amber-bg: rgba(245,166,35,0.12);
+    --grey: #a0aec0;
+    --grey-bg: rgba(160,174,192,0.1);
+    --darkgrey: #718096;
+    --darkgrey-bg: rgba(113,128,150,0.1);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-width: 900px;
+    min-height: 100vh;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #040848;
+    border-bottom: 1px solid rgba(45,142,255,0.3);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+  }
+  .topbar-logo { font-weight: 700; font-size: 15px; letter-spacing: 0.03em; color: #fff; }
+  .topbar-logo span { color: var(--accent); }
+  .topbar-client {
+    font-size: 13px; font-weight: 600;
+    color: #fff;
+    background: rgba(45,142,255,0.18);
+    border: 1px solid rgba(45,142,255,0.4);
+    padding: 4px 14px; border-radius: 20px;
+  }
+
+  /* ── Step indicator ── */
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 52px;
+    overflow-x: auto;
+  }
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 0 12px;
+    white-space: nowrap;
+    cursor: default;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+  }
+  .step-item.done { opacity: 0.65; cursor: pointer; }
+  .step-item.done:hover { opacity: 0.85; }
+  .step-item.active { opacity: 1; }
+  .step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    flex-shrink: 0;
+  }
+  .step-item.active .step-num { background: var(--accent); border-color: var(--accent); }
+  .step-item.done .step-num { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .step-label { font-size: 12px; font-weight: 500; }
+  .step-sep { color: var(--text-dim); font-size: 12px; padding: 0 4px; flex-shrink: 0; }
+
+  /* ── Main layout ── */
+  .main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .card-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .card-desc { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 18px;
+    border-radius: var(--radius-sm);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px; font-weight: 500;
+    border: none; cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-secondary { background: var(--surface3); color: var(--text); border: 1px solid var(--border2); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent); }
+  .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border2); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
+  .btn-danger:hover:not(:disabled) { background: #3a1010; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-xs { padding: 3px 8px; font-size: 11px; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+  .badge-banded { background: var(--green-bg); color: var(--green); border: 1px solid #1a5c3a; }
+  .badge-custom { background: var(--red-bg); color: var(--red); border: 1px solid #5c1a1a; }
+  .badge-notfound { background: var(--amber-bg); color: var(--amber); border: 1px solid #5c3a00; }
+  .badge-catalogue { background: var(--grey-bg); color: var(--grey); border: 1px solid #3a3f50; }
+  .badge-unavailable { background: var(--darkgrey-bg); color: var(--darkgrey); border: 1px solid #2a2f40; }
+  .badge-high { background: #0d2e1a; color: var(--green); }
+  .badge-medium { background: var(--amber-bg); color: var(--amber); }
+  .badge-low { background: var(--red-bg); color: var(--red); }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .td-mono { font-family: 'IBM Plex Mono', monospace; }
+  .td-dim { color: var(--text-muted); }
+  .td-muted { color: var(--text-dim); }
+  td.highlight-green { background: var(--green-bg) !important; color: var(--green); font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+  .row-skipped td { opacity: 0.4; }
+  .row-unavailable td { opacity: 0.4; }
+
+  /* ── Form elements ── */
+  input[type=text], input[type=number], select, textarea {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(45,142,255,0.35);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    background: rgba(45,142,255,0.1);
+  }
+  select option { background: #0a1260; color: #fff; }
+  optgroup { background: #040848; color: rgba(255,255,255,0.5); font-style: normal; font-size: 11px; }
+  input.iso-input {
+    width: 52px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 5px 6px;
+  }
+  input.price-input {
+    width: 90px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+  select.match-select { width: 300px; font-size: 12px; }
+  textarea { width: 100%; resize: vertical; min-height: 140px; line-height: 1.6; }
+  .field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.03em; }
+  .field-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface2);
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: #1a1f35;
+  }
+  .upload-zone-icon { font-size: 28px; margin-bottom: 10px; opacity: 0.6; }
+  .upload-zone-text { font-size: 13px; color: var(--text-muted); }
+  .upload-zone-text strong { color: var(--text); }
+  .upload-zone-sub { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+  .file-preview {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-top: 12px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .file-preview-thumb { max-width: 80px; max-height: 60px; border-radius: 4px; object-fit: cover; }
+  .file-preview-name { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+
+  /* ── Loading spinner ── */
+  .spinner-wrap { display: flex; align-items: center; gap: 12px; padding: 16px 0; color: var(--text-muted); font-size: 13px; }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error / info banners ── */
+  .alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: flex; align-items: flex-start; gap: 10px;
+    line-height: 1.5;
+  }
+  .alert-error { background: var(--red-bg); color: var(--red); border: 1px solid #5c1a1a; }
+  .alert-warn { background: var(--amber-bg); color: var(--amber); border: 1px solid #5c3a00; }
+  .alert-info { background: #0d1a2e; color: #7ab3f5; border: 1px solid #1a3a5c; }
+  .alert-success { background: var(--green-bg); color: var(--green); border: 1px solid #1a5c3a; }
+
+  /* ── Navigation row ── */
+  .nav-row { display: flex; align-items: center; gap: 12px; margin-top: 24px; }
+  .nav-row .spacer { flex: 1; }
+
+  /* ── Summary stats ── */
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 20px;
+    text-align: center;
+    min-width: 100px;
+  }
+  .stat-num { font-size: 22px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ── Band analysis ── */
+  .band-analysis { margin-top: 28px; }
+  .band-analysis-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-muted); }
+  .band-analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 20px; }
+  .chart-wrap canvas { max-height: 220px; }
+
+  /* ── Column toggle ── */
+  .col-toggle-wrap { margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .col-toggle-label { font-size: 11px; color: var(--text-muted); }
+  .col-toggle-btn {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px;
+    border: 1px solid var(--border2); background: var(--surface2); color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .col-toggle-btn.active { background: var(--surface3); color: var(--text); border-color: var(--accent); }
+
+  /* ── Dialog ── */
+  .dialog-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  .dialog {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    max-width: 460px; width: 90%;
+  }
+  .dialog-title { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  .dialog-body { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+  .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* ── Misc ── */
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .tag-warn { color: var(--amber); font-size: 14px; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .pricelist-banner {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .hidden { display: none !important; }
+  .text-green { color: var(--green); }
+  .text-red { color: var(--red); }
+  .text-amber { color: var(--amber); }
+  .text-muted { color: var(--text-muted); }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-20 { margin-top: 20px; }
+  .gap-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  /* Sanity check boxes */
+  .sanity-boxes { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .sanity-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+  .sanity-box-name { color: var(--text-muted); margin-bottom: 4px; }
+  .sanity-box-price { font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">BGS <span>Price Checker</span></div>
+  <div id="topbar-client-area"></div>
+  <div style="font-size:11px;color:var(--text-dim)" class="mono" id="pricelist-topbar-info"></div>
+</div>
+
+<div id="step-indicator-container"></div>
+<div class="main" id="app-main"></div>
+<div id="dialog-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+let API_KEY = localStorage.getItem('vrmk_api_key') || '';
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_VERSION = '2023-06-01';
+const MODEL = 'claude-opus-4-7';
+
+const FOREX = {
+  USD: 1.0,
+  EUR: 0.8929725,
+  GBP: 0.7609399,
+  AUD: 1.5589598,
+  SGD: 1.3111084,
+  MYR: 4.2946049,
+  NZD: 1.7233647,
+  PHP: 57.5438381
+};
+const CURRENCY_SYMBOLS = { GBP:'£', USD:'$', EUR:'€', AUD:'A$', SGD:'S$', MYR:'RM', PHP:'₱', NZD:'NZ$' };
+const CURRENCY_DETECT = [
+  { sym: '£', cur: 'GBP' }, { sym: 'A$', cur: 'AUD' }, { sym: 'S$', cur: 'SGD' },
+  { sym: 'RM', cur: 'MYR' }, { sym: '₱', cur: 'PHP' }, { sym: '€', cur: 'EUR' },
+  { sym: 'NZ$', cur: 'NZD' }
+];
+
+const STEPS = [
+  { num: 1, label: 'Upload Contract' },
+  { num: 2, label: 'Confirm Countries' },
+  { num: 3, label: 'Map Checks' },
+  { num: 4, label: 'Confirm Prices' },
+  { num: 5, label: 'Results' },
+  { num: 6, label: 'Export CSV' }
+];
+
+// Band colours
+const BAND_COLORS = {
+  A: { main: '#5c6ef8', bg: 'rgba(92,110,248,0.15)', border: '#5c6ef8' },
+  B: { main: '#27ae60', bg: 'rgba(39,174,96,0.15)',  border: '#27ae60' },
+  C: { main: '#e67e22', bg: 'rgba(230,126,34,0.15)', border: '#e67e22' },
+  D: { main: '#9b59b6', bg: 'rgba(155,89,182,0.15)', border: '#9b59b6' }
+};
+
+const COUNTRY_MAP = {
+  'afghanistan':'AF','albania':'AL','algeria':'DZ','andorra':'AD','angola':'AO',
+  'argentina':'AR','armenia':'AM','australia':'AU','austria':'AT','azerbaijan':'AZ',
+  'bahrain':'BH','bangladesh':'BD','belgium':'BE','bolivia':'BO','bosnia':'BA',
+  'botswana':'BW','brazil':'BR','brunei':'BN','bulgaria':'BG','cambodia':'KH',
+  'cameroon':'CM','canada':'CA','chile':'CL','china':'CN','colombia':'CO',
+  'croatia':'HR','cyprus':'CY','czech republic':'CZ','czechia':'CZ','denmark':'DK',
+  'ecuador':'EC','egypt':'EG','estonia':'EE','ethiopia':'ET','finland':'FI',
+  'france':'FR','georgia':'GE','germany':'DE','ghana':'GH','greece':'GR',
+  'hong kong':'HK','hungary':'HU','india':'IN','indonesia':'ID','ireland':'IE',
+  'israel':'IL','italy':'IT','ivory coast':'CI',"cote d'ivoire":'CI',
+  'japan':'JP','jordan':'JO','kazakhstan':'KZ','kenya':'KE','south korea':'KR',
+  'korea':'KR','kuwait':'KW','latvia':'LV','lebanon':'LB','lithuania':'LT',
+  'luxembourg':'LU','malaysia':'MY','malta':'MT','mauritius':'MU','mexico':'MX',
+  'moldova':'MD','morocco':'MA','mozambique':'MZ','myanmar':'MM','namibia':'NA',
+  'nepal':'NP','netherlands':'NL','new zealand':'NZ','nigeria':'NG','norway':'NO',
+  'oman':'OM','pakistan':'PK','panama':'PA','peru':'PE','philippines':'PH',
+  'poland':'PL','portugal':'PT','qatar':'QA','romania':'RO','russia':'RU',
+  'rwanda':'RW','saudi arabia':'SA','senegal':'SN','serbia':'RS','singapore':'SG',
+  'slovakia':'SK','slovenia':'SI','south africa':'ZA','spain':'ES','sri lanka':'LK',
+  'sweden':'SE','switzerland':'CH','taiwan':'TW','tanzania':'TZ','thailand':'TH',
+  'tunisia':'TN','turkey':'TR','türkiye':'TR','uganda':'UG','ukraine':'UA',
+  'united arab emirates':'AE','uae':'AE','united kingdom':'GB','uk':'GB',
+  'great britain':'GB','england':'GB','scotland':'GB','wales':'GB',
+  'united states':'US','usa':'US','united states of america':'US','us':'US',
+  'uruguay':'UY','venezuela':'VE','vietnam':'VN','zambia':'ZM','zimbabwe':'ZW',
+  'northern ireland':'GB','isle of man':'IM','jersey':'JE','guernsey':'GG'
+};
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const state = {
+  currentStep: 0,
+  completedSteps: new Set(),
+  pricelist: null,
+  pricelistMeta: null,
+  csvTemplate: null,
+  contractRawText: null,
+  contractImageData: null,
+  contractFileName: null,
+  clientName: '',
+  extractedRows: null,
+  selectedCountries: null,
+  countryMappings: null,
+  checkMappings: null,
+  currency: 'USD',
+  forexRate: 1.0,
+  confirmedRows: null,
+  results: null,
+  visibleCols: new Set(['check','pid','country','price','bandA','bandB','bandC','bandD','available','status','closest','devAmt','devPct'])
+};
+
+// ═══════════════════════════════════════════════════════════
+// PRICELIST STORAGE
+// ═══════════════════════════════════════════════════════════
+function savePricelist(data, meta) {
+  try {
+    localStorage.setItem('vrmk_pricelist', JSON.stringify(data));
+    localStorage.setItem('vrmk_pricelist_meta', JSON.stringify(meta));
+  } catch(e) { console.warn('Could not save pricelist to localStorage:', e); }
+}
+function loadPricelist() {
+  try {
+    const data = localStorage.getItem('vrmk_pricelist');
+    const meta = localStorage.getItem('vrmk_pricelist_meta');
+    if (data && meta) return { data: JSON.parse(data), meta: JSON.parse(meta) };
+  } catch(e) { console.warn('Could not load pricelist:', e); }
+  return null;
+}
+function clearPricelist() {
+  localStorage.removeItem('vrmk_pricelist');
+  localStorage.removeItem('vrmk_pricelist_meta');
+}
+
+function parseExcelPricelist(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheetName = '2026 Pricelist';
+  if (!wb.SheetNames.includes(sheetName)) {
+    throw new Error(`Could not find the tab '2026 Pricelist' in the uploaded file. Please check you are uploading the correct file.`);
+  }
+  const ws = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  // Row 0 = currency groups, Row 1 = sub-headers, Row 2+ = data
+  const currencyRow = raw[0];
+  const headerRow = raw[1];
+
+  // Map column indices
+  const colIdx = {};
+  headerRow.forEach((h, i) => {
+    if (!h) return;
+    const key = String(h).trim();
+    if (key === 'Product Class') colIdx.productClass = i;
+    else if (key === 'Product Specific') colIdx.productSpecific = i;
+    else if (key === 'Country Name') colIdx.countryName = i;
+    else if (key === 'Country Code') colIdx.countryCode = i;
+    else if (key === 'Product unique ID') colIdx.productUniqueId = i;
+    else if (key === 'Availability') colIdx.availability = i;
+  });
+
+  // Map price columns: for each currency, find 4 band columns
+  const currencies = ['USD','GBP','NZD','AUD','SGD','PHP','EUR','MYR'];
+  const priceColMap = {}; // { USD: { A: idx, B: idx, C: idx, D: idx }, ... }
+  const bandLabels = ['Band A', 'Band B', 'Band C', 'Band D'];
+  const bandKeys = ['A','B','C','D'];
+
+  currencies.forEach(cur => {
+    priceColMap[cur] = {};
+    let curOccurrence = 0;
+    // find all columns for this currency
+    const curCols = [];
+    currencyRow.forEach((c, i) => { if (c === cur) curCols.push(i); });
+    curCols.forEach((colI, bandIdx) => {
+      if (bandIdx < 4) priceColMap[cur][bandKeys[bandIdx]] = colI;
+    });
+  });
+
+  const rows = [];
+  for (let r = 2; r < raw.length; r++) {
+    const row = raw[r];
+    if (!row || !row[colIdx.productClass]) continue;
+    const avail = row[colIdx.availability];
+    if (String(avail).trim().toLowerCase() !== 'yes') continue;
+
+    const entry = {
+      productClass: String(row[colIdx.productClass] || '').trim(),
+      productSpecific: String(row[colIdx.productSpecific] || '').trim(),
+      countryName: String(row[colIdx.countryName] || '').trim(),
+      countryCode: String(row[colIdx.countryCode] || '').trim().toUpperCase(),
+      productUniqueId: String(row[colIdx.productUniqueId] || '').trim(),
+      availability: 'Yes',
+      prices: {}
+    };
+    currencies.forEach(cur => {
+      entry.prices[cur] = {};
+      bandKeys.forEach(b => {
+        const idx = priceColMap[cur][b];
+        const val = idx !== undefined ? row[idx] : null;
+        entry.prices[cur][b] = (val !== null && val !== '' && !isNaN(Number(val))) ? Number(val) : null;
+      });
+    });
+    rows.push(entry);
+  }
+  return rows;
+}
+
+function parseCsvTemplate(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    rows.push({
+      product_class: parts[0] || '',
+      product_specific: parts[1] || '',
+      product_country: parts[2] || '',
+      product_unique_id: parts[3] || '',
+      amount: parts[4] !== undefined ? parts[4] : ''
+    });
+  }
+  return rows;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER HELPERS
+// ═══════════════════════════════════════════════════════════
+function setMain(html) { document.getElementById('app-main').innerHTML = html; }
+function $(id) { return document.getElementById(id); }
+function renderStepIndicator() {
+  if (state.currentStep === 0) {
+    document.getElementById('step-indicator-container').innerHTML = '';
+    return;
+  }
+  let html = '<div class="step-indicator">';
+  STEPS.forEach((s, i) => {
+    const done = state.completedSteps.has(s.num);
+    const active = state.currentStep === s.num;
+    const cls = done ? 'done' : active ? 'active' : '';
+    const numContent = done ? '✓' : s.num;
+    html += `<div class="step-item ${cls}" onclick="stepClickNav(${s.num})">
+      <div class="step-num">${numContent}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`;
+    if (i < STEPS.length - 1) html += '<div class="step-sep">›</div>';
+  });
+  html += '</div>';
+  document.getElementById('step-indicator-container').innerHTML = html;
+}
+function stepClickNav(n) {
+  if (state.completedSteps.has(n) || state.currentStep === n) goToStep(n);
+}
+function updateTopbarInfo() {
+  const el = $('pricelist-topbar-info');
+  if (el) {
+    if (state.pricelistMeta) {
+      const d = new Date(state.pricelistMeta.uploadedAt);
+      const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+      el.textContent = `Pricelist: ${state.pricelistMeta.fileName} · ${days === 0 ? 'today' : days + 'd ago'}`;
+    } else { el.textContent = ''; }
+  }
+  // Client name pill in topbar
+  const clientEl = $('topbar-client-area');
+  if (clientEl) {
+    if (state.clientName && state.currentStep > 0) {
+      clientEl.innerHTML = `<div class="topbar-client">📋 ${escHtml(state.clientName)}</div>`;
+    } else {
+      clientEl.innerHTML = '';
+    }
+  }
+}
+
+function clientSubtitle() {
+  if (!state.clientName) return '';
+  return `<div style="font-size:12px;color:var(--text-muted);margin-top:-14px;margin-bottom:20px">Client: <strong style="color:var(--accent)">${escHtml(state.clientName)}</strong></div>`;
+}
+
+function showDialog(title, body, actions) {
+  const html = `<div class="dialog-overlay" id="dialog-overlay">
+    <div class="dialog">
+      <div class="dialog-title">${title}</div>
+      <div class="dialog-body">${body}</div>
+      <div class="dialog-actions">${actions}</div>
+    </div>
+  </div>`;
+  $('dialog-container').innerHTML = html;
+}
+function closeDialog() { $('dialog-container').innerHTML = ''; }
+
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function goToStep(n) {
+  state.currentStep = n;
+  renderStepIndicator();
+  if (n === 0) renderPreStep();
+  else if (n === 1) renderStep1();
+  else if (n === 2) renderStep2();
+  else if (n === 3) renderStep3();
+  else if (n === 4) renderStep4(); // Confirm Prices (was 5)
+  else if (n === 5) renderStep5(); // Results (was 6)
+  else if (n === 6) renderStep6(); // Export CSV (was 7)
+  window.scrollTo(0, 0);
+}
+
+function backBtn(targetStep) {
+  return `<button class="btn btn-ghost" onclick="goToStep(${targetStep})">← Back</button>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRE-STEP: PRICELIST SETUP
+// ═══════════════════════════════════════════════════════════
+function renderPreStep() {
+  renderStepIndicator();
+  const cached = state.pricelist ? state.pricelistMeta : null;
+  const hasKey = !!API_KEY;
+
+  // ── API Key card ──
+  let html = `<div class="card">
+    <div class="card-title">API Key</div>
+    <div class="card-desc">This tool uses automated analysis for two steps. Paste your Anthropic API key below — it will be stored in your browser and never sent anywhere except Anthropic's servers.</div>
+    ${hasKey
+      ? `<div class="alert alert-success"><span>✓</span><div>API key is set and saved in your browser.</div></div>
+         <div class="gap-row mt-8">
+           <button class="btn btn-ghost btn-sm" onclick="showApiKeyInput()">Change key</button>
+         </div>
+         <div id="api-key-input-area"></div>`
+      : `<div id="api-key-input-area">${renderApiKeyInput()}</div>`
+    }
+  </div>`;
+
+  // ── Pricelist card ──
+  html += `<div class="card">
+    <div class="card-title">Pricelist Setup</div>
+    <div class="card-desc">The tool needs the pricelist Excel file to run comparisons. Upload it once and your browser will remember it.</div>`;
+
+  if (cached) {
+    const d = new Date(cached.uploadedAt);
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    html += `<div class="alert alert-info">
+      <span>📋</span>
+      <div><strong>Pricelist loaded:</strong> ${cached.fileName} (uploaded ${days === 0 ? 'today' : days + ' days ago'})</div>
+    </div>
+    <button class="btn btn-ghost btn-sm mt-8" onclick="showReplaceUpload()">Upload a new pricelist</button>
+    <div id="replace-upload-area"></div>`;
+  } else {
+    html += `<div id="pricelist-upload-area">
+      ${renderPricelistUploadZone()}
+    </div>`;
+  }
+
+  html += `<div id="prestep-error"></div>`;
+  html += `</div>`;
+
+  // CSV template upload
+  html += `<div class="card">
+    <div class="card-title">CSV Output Template</div>
+    <div class="card-desc">Upload the <strong>unique_price_list_template.csv</strong> file. This is the template the tool will fill in when exporting custom-priced checks. Once uploaded, it will be remembered in your browser.</div>`;
+
+  const csvCached = state.csvTemplate;
+  if (csvCached && state.csvTemplateMeta) {
+    const d2 = new Date(state.csvTemplateMeta.uploadedAt);
+    const days2 = Math.floor((Date.now() - d2.getTime()) / 86400000);
+    html += `<div class="alert alert-info">
+      <span>📄</span>
+      <div><strong>CSV template loaded:</strong> ${state.csvTemplateMeta.fileName} (${days2 === 0 ? 'today' : days2 + ' days ago'}, ${csvCached.length.toLocaleString()} rows)</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="showReplaceCsvUpload()">Upload a new template</button>
+    <div id="replace-csv-area"></div>`;
+  } else {
+    html += `<div id="csv-upload-area">${renderCsvUploadZone()}</div>`;
+  }
+  html += `<div id="csv-error"></div></div>`;
+
+  // Continue button — shown only when all three are ready
+  const allReady = hasKey && !!state.pricelist && !!state.csvTemplate;
+  html += `<div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:20px 32px">
+    <div style="font-size:13px;color:var(--text-muted)">
+      ${!hasKey ? '⚠ API key required' : !state.pricelist ? '⚠ Pricelist required' : !state.csvTemplate ? '⚠ CSV template required' : '✓ All set — ready to start'}
+    </div>
+    <button class="btn btn-primary" onclick="proceedToStep1()" ${allReady ? '' : 'disabled'}>Start checking →</button>
+  </div>`;
+
+  setMain(html);
+  bindPricelistUpload();
+  bindCsvUpload();
+}
+
+function renderApiKeyInput() {
+  return `<div style="max-width:500px">
+    <div class="field-label">ANTHROPIC API KEY</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="password" id="api-key-field" placeholder="sk-ant-..." style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px">
+      <button class="btn btn-primary" onclick="saveApiKey()">Save Key</button>
+    </div>
+    <div class="field-hint">Your key is stored only in this browser. It is never shared or logged.</div>
+    <div id="api-key-error" style="margin-top:8px"></div>
+  </div>`;
+}
+
+function showApiKeyInput() {
+  $('api-key-input-area').innerHTML = renderApiKeyInput();
+}
+
+function saveApiKey() {
+  const val = $('api-key-field').value.trim();
+  if (!val || !val.startsWith('sk-ant-')) {
+    $('api-key-error').innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please enter a valid Anthropic API key starting with <span class="mono">sk-ant-</span></div></div>`;
+    return;
+  }
+  API_KEY = val;
+  localStorage.setItem('vrmk_api_key', val);
+  renderPreStep();
+}
+
+function proceedToStep1() {
+  if (!API_KEY) {
+    const errEl = $('prestep-error');
+    if (errEl) errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please enter and save your API key before continuing.</div></div>`;
+    window.scrollTo(0,0);
+    return;
+  }
+  if (!state.csvTemplate) {
+    const errEl = $('csv-error');
+    if (errEl) errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please upload the CSV output template before continuing.</div></div>`;
+    return;
+  }
+  goToStep(1);
+}
+
+function renderPricelistUploadZone() {
+  return `<div class="upload-zone" id="pricelist-drop-zone" onclick="$('pricelist-file-input').click()">
+    <div class="upload-zone-icon">📊</div>
+    <div class="upload-zone-text"><strong>Click to upload</strong> or drag and drop</div>
+    <div class="upload-zone-sub">ARIS COPY of Sales team Price list 2026.xlsx</div>
+  </div>
+  <input type="file" id="pricelist-file-input" accept=".xlsx,.xls" style="display:none">
+  <div id="pricelist-loading" class="hidden">
+    <div class="spinner-wrap"><div class="spinner"></div>Reading pricelist…</div>
+  </div>`;
+}
+
+function renderCsvUploadZone() {
+  return `<div class="upload-zone" id="csv-drop-zone" onclick="$('csv-file-input').click()">
+    <div class="upload-zone-icon">📄</div>
+    <div class="upload-zone-text"><strong>Click to upload</strong> or drag and drop</div>
+    <div class="upload-zone-sub">unique_price_list_template.csv</div>
+  </div>
+  <input type="file" id="csv-file-input" accept=".csv" style="display:none">
+  <div id="csv-loading" class="hidden">
+    <div class="spinner-wrap"><div class="spinner"></div>Reading CSV template…</div>
+  </div>`;
+}
+
+function showReplaceUpload() {
+  $('replace-upload-area').innerHTML = `<div class="mt-16">${renderPricelistUploadZone()}</div>`;
+  bindPricelistUpload();
+}
+
+function showReplaceCsvUpload() {
+  $('replace-csv-area').innerHTML = `<div class="mt-16">${renderCsvUploadZone()}</div>`;
+  bindCsvUpload();
+}
+
+function bindPricelistUpload() {
+  const inp = $('pricelist-file-input');
+  const zone = $('pricelist-drop-zone');
+  if (!inp || !zone) return;
+  inp.addEventListener('change', e => handlePricelistFile(e.target.files[0]));
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) handlePricelistFile(e.dataTransfer.files[0]); });
+}
+
+function bindCsvUpload() {
+  const inp = $('csv-file-input');
+  const zone = $('csv-drop-zone');
+  if (!inp || !zone) return;
+  inp.addEventListener('change', e => handleCsvTemplateFile(e.target.files[0]));
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) handleCsvTemplateFile(e.dataTransfer.files[0]); });
+}
+
+function handlePricelistFile(file) {
+  if (!file) return;
+  const loadEl = $('pricelist-loading');
+  const errEl = $('prestep-error');
+  if (loadEl) loadEl.classList.remove('hidden');
+  if (errEl) errEl.innerHTML = '';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseExcelPricelist(e.target.result);
+      if (!rows.length) throw new Error('No data rows found in the pricelist file.');
+      state.pricelist = rows;
+      state.pricelistMeta = { fileName: file.name, uploadedAt: Date.now(), rowCount: rows.length };
+      savePricelist(rows, state.pricelistMeta);
+      updateTopbarInfo();
+      renderPreStep();
+    } catch(err) {
+      if (loadEl) loadEl.classList.add('hidden');
+      if (errEl) errEl.innerHTML = `<div class="alert alert-error mt-16"><span>⚠</span><div>${err.message}</div></div>`;
+    }
+  };
+  reader.onerror = () => {
+    if (loadEl) loadEl.classList.add('hidden');
+    if (errEl) errEl.innerHTML = `<div class="alert alert-error mt-16"><span>⚠</span><div>Could not read the file. Please try again.</div></div>`;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function handleCsvTemplateFile(file) {
+  if (!file) return;
+  const loadEl = $('csv-loading');
+  const errEl = $('csv-error');
+  if (loadEl) loadEl.classList.remove('hidden');
+  if (errEl) errEl.innerHTML = '';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseCsvTemplate(e.target.result);
+      if (!rows.length) throw new Error('No rows found in the CSV template.');
+      state.csvTemplate = rows;
+      state.csvTemplateMeta = { fileName: file.name, uploadedAt: Date.now(), rowCount: rows.length };
+      try {
+        localStorage.setItem('vrmk_csv_template', JSON.stringify(rows));
+        localStorage.setItem('vrmk_csv_template_meta', JSON.stringify(state.csvTemplateMeta));
+      } catch(e) {}
+      renderPreStep();
+    } catch(err) {
+      if (loadEl) loadEl.classList.add('hidden');
+      if (errEl) errEl.innerHTML = `<div class="alert alert-error mt-16"><span>⚠</span><div>${err.message}</div></div>`;
+    }
+  };
+  reader.onerror = () => {
+    if (loadEl) loadEl.classList.add('hidden');
+    if (errEl) errEl.innerHTML = `<div class="alert alert-error mt-16"><span>⚠</span><div>Could not read the CSV file. Please try again.</div></div>`;
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 1: UPLOAD CONTRACT
+// ═══════════════════════════════════════════════════════════
+function renderStep1() {
+  const prevText = state.contractRawText || '';
+  const prevFile = state.contractFileName || '';
+  const prevImg = state.contractImageData;
+
+  let html = `<div class="card">
+    <div class="card-title">Step 1 — Upload Contract</div>
+    <div class="card-desc">Upload the client's contract pricing table. Supported formats: Excel, CSV, PDF, images (screenshot), or paste text directly.</div>
+    ${clientSubtitle()}
+    <div class="pricelist-banner">
+      <span>📊 Pricelist: ${state.pricelistMeta ? state.pricelistMeta.fileName : '—'} · ${state.pricelist ? state.pricelist.length.toLocaleString() + ' rows' : ''}</span>
+      <button class="btn btn-ghost btn-xs" onclick="goToStep(0)">Change</button>
+    </div>
+
+    <div id="step1-error"></div>
+
+    <div class="upload-zone" id="contract-drop-zone" onclick="$('contract-file-input').click()">
+      <div class="upload-zone-icon">📁</div>
+      <div class="upload-zone-text"><strong>Click to upload</strong> or drag and drop</div>
+      <div class="upload-zone-sub">Excel, CSV, PDF, PNG, JPG, WEBP, GIF, or plain text</div>
+    </div>
+    <input type="file" id="contract-file-input" accept=".xlsx,.xls,.csv,.pdf,.txt,.png,.jpg,.jpeg,.webp,.gif" style="display:none">
+
+    <div id="file-preview-area">${prevFile ? `<div class="file-preview"><div><div class="file-preview-name">📎 ${prevFile}</div></div></div>` : ''}</div>
+    <div id="img-preview-area">${prevImg ? `<div class="file-preview"><img class="file-preview-thumb" src="${prevImg.dataUrl}"><div class="file-preview-name">${prevImg.fileName}</div></div>` : ''}</div>
+
+    <div style="margin-top:16px">
+      <div class="field-label">OR PASTE CONTENT</div>
+      <textarea id="contract-text" placeholder="Paste contract pricing table here…">${prevText}</textarea>
+    </div>
+
+    <div id="step1-loading" class="hidden">
+      <div class="spinner-wrap"><div class="spinner"></div>Extracting pricing data…</div>
+    </div>
+
+    <div class="nav-row">
+      ${backBtn(0)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="extract-btn" onclick="runExtraction()">Extract Data →</button>
+    </div>
+  </div>`;
+  setMain(html);
+  bindContractUpload();
+}
+
+function bindContractUpload() {
+  const inp = $('contract-file-input');
+  const zone = $('contract-drop-zone');
+  if (!inp || !zone) return;
+  inp.addEventListener('change', e => handleContractFile(e.target.files[0]));
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) handleContractFile(e.dataTransfer.files[0]); });
+}
+
+async function handleContractFile(file) {
+  if (!file) return;
+
+  // Warn if existing progress would be cleared
+  if (state.completedSteps.size > 0 && state.extractedRows) {
+    showDialog(
+      'Replace contract?',
+      'Uploading a new contract will clear your progress from Step 2 onwards. Download your current results first if needed.',
+      `<button class="btn btn-ghost" onclick="closeDialog()">Cancel</button>
+       ${state.results ? `<button class="btn btn-secondary" onclick="downloadResultsCsv();closeDialog()">Download results first</button>` : ''}
+       <button class="btn btn-danger" onclick="closeDialog();clearProgressAndLoad()">Clear & continue</button>`
+    );
+    // store file for after confirmation
+    window._pendingContractFile = file;
+    return;
+  }
+  processContractFile(file);
+}
+
+function clearProgressAndLoad(fname) {
+  state.completedSteps = new Set();
+  state.extractedRows = null;
+  state.selectedCountries = null;
+  state.countryMappings = null;
+  state.checkMappings = null;
+  state.confirmedRows = null;
+  state.results = null;
+  state.clientName = '';
+  updateTopbarInfo();
+  const file = window._pendingContractFile;
+  window._pendingContractFile = null;
+  if (file) processContractFile(file);
+}
+
+async function processContractFile(file) {
+  if (!file) return;
+  const errEl = $('step1-error');
+  errEl.innerHTML = '';
+  const name = file.name.toLowerCase();
+  const previewArea = $('file-preview-area');
+  const imgArea = $('img-preview-area');
+
+  if (/\.(png|jpg|jpeg|webp|gif)$/.test(name)) {
+    // Image — check size
+    if (file.size > 5 * 1024 * 1024) {
+      errEl.innerHTML = `<div class="alert alert-warn"><span>⚠</span><div>Image is large (${(file.size/1024/1024).toFixed(1)}MB) and may cause API errors. Consider cropping or reducing quality before uploading.</div></div>`;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const b64 = dataUrl.split(',')[1];
+      const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', webp:'image/webp', gif:'image/gif' };
+      const ext = name.split('.').pop();
+      state.contractImageData = { dataUrl, b64, mimeType: mimeMap[ext] || 'image/png', fileName: file.name };
+      state.contractRawText = null;
+      state.contractFileName = file.name;
+      imgArea.innerHTML = `<div class="file-preview"><img class="file-preview-thumb" src="${dataUrl}"><div class="file-preview-name">${file.name}</div></div>`;
+      previewArea.innerHTML = '';
+      $('contract-text').value = '';
+    };
+    reader.onerror = () => { errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Could not read the image file.</div></div>`; };
+    reader.readAsDataURL(file);
+  } else if (/\.(xlsx|xls)$/.test(name)) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        let text = '';
+        wb.SheetNames.forEach(sn => {
+          const sheet = wb.Sheets[sn];
+          text += `[Sheet: ${sn}]\n`;
+          text += XLSX.utils.sheet_to_csv(sheet, { FS: '\t' }) + '\n\n';
+        });
+        state.contractRawText = text;
+        state.contractImageData = null;
+        state.contractFileName = file.name;
+        $('contract-text').value = text;
+        previewArea.innerHTML = `<div class="file-preview"><div class="file-preview-name">📊 ${file.name}</div></div>`;
+        imgArea.innerHTML = '';
+      } catch(err) {
+        errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Could not read Excel file: ${err.message}</div></div>`;
+      }
+    };
+    reader.onerror = () => { errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Could not read the file.</div></div>`; };
+    reader.readAsArrayBuffer(file);
+  } else if (/\.pdf$/.test(name)) {
+    errEl.innerHTML = `<div class="alert alert-info"><span>ℹ</span><div>For PDFs, please open the PDF and copy-paste the pricing table into the text area below. PDF text extraction in the browser can be unreliable for tables.</div></div>`;
+    state.contractFileName = file.name;
+    previewArea.innerHTML = `<div class="file-preview"><div class="file-preview-name">📄 ${file.name} — please paste content below</div></div>`;
+  } else {
+    // CSV or plain text
+    const reader = new FileReader();
+    reader.onload = e => {
+      state.contractRawText = e.target.result;
+      state.contractImageData = null;
+      state.contractFileName = file.name;
+      $('contract-text').value = e.target.result;
+      previewArea.innerHTML = `<div class="file-preview"><div class="file-preview-name">📄 ${file.name}</div></div>`;
+      imgArea.innerHTML = '';
+    };
+    reader.onerror = () => { errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Could not read the file.</div></div>`; };
+    reader.readAsText(file);
+  }
+}
+
+async function runExtraction() {
+  const errEl = $('step1-error');
+  const loadEl = $('step1-loading');
+  const btn = $('extract-btn');
+  errEl.innerHTML = '';
+
+  const textVal = $('contract-text').value.trim();
+  if (textVal) state.contractRawText = textVal;
+
+  if (!state.contractImageData && !state.contractRawText) {
+    errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please upload a file or paste contract content before extracting.</div></div>`;
+    return;
+  }
+
+  loadEl.classList.remove('hidden');
+  btn.disabled = true;
+
+  try {
+    let messages;
+    const extractInstr = 'You are analysing a contract pricing table. Extract every check-country-price combination.\n\nReturn ONLY valid JSON in this exact format (no markdown, no explanation):\n{"clientName":"company name or empty string","rows":[{"contractName":"check name","contractCountry":"country","price":68,"isNA":false}]}\n\nFor NA cells use: {"contractName":"check name","contractCountry":"country","price":null,"isNA":true}\n\nRules:\n1. clientName: the client/company name from the document header or title\n2. contractName: check/service name exactly as written\n3. contractCountry: country name or code exactly as written\n4. price: number only — strip currency symbols, commas, and any superscript/footnote markers (e.g. 68 not 68¹, 49 not 49⁵)\n5. NA cells: cells showing NA, N/A, or visually greyed out = price null, isNA true — INCLUDE these rows\n6. Table orientation: expand any matrix layout (countries as rows OR columns, or separate per-country tables) into one object per check-country pair\n7. Include ALL check-country combinations';
+
+    if (state.contractImageData) {
+      messages = [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: state.contractImageData.mimeType, data: state.contractImageData.b64 } },
+          { type: 'text', text: extractInstr }
+        ]
+      }];
+    } else {
+      messages = [{
+        role: 'user',
+        content: extractInstr + '\n\nCONTRACT CONTENT:\n' + state.contractRawText
+      }];
+    }
+
+    const result = await callAI(messages, 8000);
+    let parsed = parseJsonFromAI(result);
+
+    // Handle {clientName, rows} response object
+    if (parsed && !Array.isArray(parsed) && parsed.rows) {
+      if (parsed.clientName && String(parsed.clientName).trim()) {
+        state.clientName = String(parsed.clientName).trim();
+        updateTopbarInfo();
+      }
+      parsed = parsed.rows;
+    }
+
+    // Fallback: if full JSON parse failed, try extracting individual row objects
+    // (handles truncated responses where the closing brackets are missing)
+    if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
+      const recovered = extractRowsFromText(result);
+      if (recovered && recovered.length > 0) parsed = recovered;
+    }
+
+    if (!parsed || !Array.isArray(parsed) || parsed.length === 0) {
+      loadEl.classList.add('hidden');
+      btn.disabled = false;
+      const tail = result ? result.slice(-200).replace(/</g,'&lt;') : '';
+      const head = result ? result.substring(0, 400).replace(/</g,'&lt;') : 'empty response';
+      errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>No pricing rows found — the response could not be parsed. <button class="btn btn-sm btn-secondary" style="margin-left:8px" onclick="runExtraction()">Retry</button><details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;opacity:0.7">Show raw response (first 400 + last 200 chars)</summary><pre style="font-size:10px;margin-top:6px;white-space:pre-wrap;opacity:0.7">${head}\n\n[…]\n\n${tail}</pre></details></div></div>`;
+      return;
+    }
+    // Clean extracted rows: strip superscript/footnote chars from prices
+    parsed = parsed.map(r => ({
+      ...r,
+      price: r.isNA ? null : cleanExtractedPrice(r.price)
+    }));
+    state.extractedRows = parsed;
+    state.completedSteps.add(1);
+    goToStep(2);
+  } catch(err) {
+    loadEl.classList.add('hidden');
+    btn.disabled = false;
+    errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>${err.message} <button class="btn btn-sm btn-secondary" style="margin-left:8px" onclick="runExtraction()">Retry</button></div></div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 2: CONFIRM COUNTRIES
+// ═══════════════════════════════════════════════════════════
+function renderStep2() {
+  const unique = [...new Set(state.extractedRows.map(r => r.contractCountry))];
+  if (!state.countryMappings) {
+    state.countryMappings = {};
+    unique.forEach(c => {
+      const { iso, confidence, reason } = mapCountry(c);
+      state.countryMappings[c] = { iso, confidence, reason };
+    });
+  }
+  // Initialise selection (all selected by default, preserve if user already set it)
+  if (!state.selectedCountries) {
+    state.selectedCountries = new Set(unique);
+  }
+
+  // Auto-detect currency from original contract text (first time only)
+  if (!state.currency) {
+    const src = state.contractRawText || '';
+    let detected = 'USD';
+    for (const { sym, cur } of CURRENCY_DETECT) {
+      if (src.includes(sym)) { detected = cur; break; }
+    }
+    if (detected === 'USD') {
+      const codePatterns = ['SGD','GBP','EUR','AUD','MYR','PHP','NZD'];
+      for (const code of codePatterns) {
+        if (new RegExp(`\\b${code}\\b`).test(src)) { detected = code; break; }
+      }
+    }
+    state.currency = detected;
+    state.forexRate = FOREX[detected];
+  }
+
+  const allSelected = unique.every(c => state.selectedCountries.has(c));
+  const selCount = unique.filter(c => state.selectedCountries.has(c)).length;
+
+  let html = `<div class="card">
+    <div class="card-title">Step 2 — Confirm Countries & Currency</div>
+    <div class="card-desc">Confirm the client name, country mappings, and the currency the contract prices are listed in.</div>
+    <div id="step2-error"></div>
+
+    <div style="max-width:420px;margin-bottom:24px">
+      <div class="field-label">CLIENT NAME</div>
+      <input type="text" id="s2-client-name" style="width:100%" value="${escHtml(state.clientName)}" placeholder="Enter client name…" oninput="state.clientName=this.value;updateTopbarInfo()">
+      <div class="field-hint">Extracted from contract — correct if needed.</div>
+    </div>
+
+    <div style="max-width:420px;margin-bottom:24px">
+      <div class="field-label">CONTRACT PRICING CURRENCY</div>
+      <select id="s2-currency-select" style="width:100%" onchange="state.currency=this.value;state.forexRate=FOREX[this.value]">
+        ${Object.keys(FOREX).map(c => `<option value="${c}" ${c===state.currency?'selected':''}>${c} — ${getCurrencyName(c)}</option>`).join('')}
+      </select>
+      <div class="field-hint">Auto-detected from contract. Change if incorrect.</div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin-bottom:0">Country Mappings</div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span id="s2-country-count" style="font-size:12px;color:var(--text-muted)">${selCount} of ${unique.length} selected for analysis</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text-muted)">
+          <input type="checkbox" id="s2-select-all" ${allSelected ? 'checked' : ''} onchange="toggleAllCountries(this.checked)" style="accent-color:var(--accent);width:14px;height:14px">
+          Select all
+        </label>
+      </div>
+    </div>
+    <div class="field-hint" style="margin-bottom:12px">Uncheck countries you want to exclude from the analysis. Only checked countries will proceed to the next steps.</div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:36px;text-align:center">Include</th>
+        <th>Contract Country</th>
+        <th>ISO Code</th>
+        <th>Confidence</th>
+        <th>Reason</th>
+      </tr></thead>
+      <tbody>`;
+
+  unique.forEach((c, i) => {
+    const m = state.countryMappings[c];
+    const warn = m.confidence !== 'high' ? '<span class="tag-warn">⚠</span> ' : '';
+    const checked = state.selectedCountries.has(c);
+    html += `<tr id="country-row-${i}" style="${!checked ? 'opacity:0.4' : ''}">
+      <td style="text-align:center">
+        <input type="checkbox" id="country-check-${i}" ${checked ? 'checked' : ''} onchange="toggleCountry(${i},'${escHtml(c)}',this.checked)" style="accent-color:var(--accent);width:14px;height:14px">
+      </td>
+      <td><strong>${c}</strong></td>
+      <td><input class="iso-input" id="iso-${i}" type="text" maxlength="2" value="${m.iso}" oninput="updateIso(${i}, '${escHtml(c)}', this.value)"></td>
+      <td><span class="badge badge-${m.confidence}">${warn}${m.confidence}</span></td>
+      <td class="td-dim" style="font-size:11px">${m.reason}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>
+    <div class="nav-row">
+      ${backBtn(1)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="confirmCountries()">Confirm →</button>
+    </div>
+  </div>`;
+  setMain(html);
+}
+
+function mapCountry(name) {
+  const n = name.trim();
+  const nl = n.toLowerCase();
+
+  // Direct dictionary match
+  if (COUNTRY_MAP[nl]) return { iso: COUNTRY_MAP[nl], confidence: 'high', reason: 'Dictionary match' };
+
+  // If already looks like a 2-letter code
+  if (/^[A-Za-z]{2}$/.test(n)) return { iso: n.toUpperCase(), confidence: 'medium', reason: 'Assumed to be ISO code' };
+
+  // Partial match
+  const partial = Object.keys(COUNTRY_MAP).find(k => k.includes(nl) || nl.includes(k));
+  if (partial) return { iso: COUNTRY_MAP[partial], confidence: 'medium', reason: `Partial match to "${partial}"` };
+
+  return { iso: '', confidence: 'low', reason: 'No match found — please enter manually' };
+}
+
+function updateIso(idx, country, val) {
+  if (state.countryMappings[country]) {
+    state.countryMappings[country].iso = val.toUpperCase();
+  }
+}
+
+function toggleCountry(idx, country, checked) {
+  if (!state.selectedCountries) {
+    const unique = [...new Set(state.extractedRows.map(r => r.contractCountry))];
+    state.selectedCountries = new Set(unique);
+  }
+  if (checked) state.selectedCountries.add(country);
+  else state.selectedCountries.delete(country);
+  // Update row opacity
+  const row = $('country-row-' + idx);
+  if (row) row.style.opacity = checked ? '' : '0.4';
+  // Update count and select-all checkbox
+  const unique = [...new Set(state.extractedRows.map(r => r.contractCountry))];
+  const selCount = unique.filter(c => state.selectedCountries.has(c)).length;
+  const countEl = $('s2-country-count');
+  if (countEl) countEl.textContent = selCount + ' of ' + unique.length + ' selected for analysis';
+  const allCb = $('s2-select-all');
+  if (allCb) allCb.checked = selCount === unique.length;
+}
+
+function toggleAllCountries(checked) {
+  const unique = [...new Set(state.extractedRows.map(r => r.contractCountry))];
+  if (!state.selectedCountries) state.selectedCountries = new Set();
+  unique.forEach((c, i) => {
+    if (checked) state.selectedCountries.add(c);
+    else state.selectedCountries.delete(c);
+    const cb = $('country-check-' + i);
+    if (cb) cb.checked = checked;
+    const row = $('country-row-' + i);
+    if (row) row.style.opacity = checked ? '' : '0.4';
+  });
+  const countEl = $('s2-country-count');
+  if (countEl) countEl.textContent = (checked ? unique.length : 0) + ' of ' + unique.length + ' selected for analysis';
+}
+
+function confirmCountries() {
+  const errEl = $('step2-error');
+  // Save client name from field
+  const cnField = $('s2-client-name');
+  if (cnField) { state.clientName = cnField.value.trim(); updateTopbarInfo(); }
+
+  const unique = [...new Set(state.extractedRows.map(r => r.contractCountry))];
+
+  // Validate at least one country is selected
+  const selCount = unique.filter(c => state.selectedCountries && state.selectedCountries.has(c)).length;
+  if (selCount === 0) {
+    errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please select at least one country to analyse.</div></div>`;
+    return;
+  }
+
+  // Validate ISO codes only for selected countries
+  const selected = unique.filter(c => state.selectedCountries.has(c));
+  const blanks = selected.filter(c => !state.countryMappings[c] || !state.countryMappings[c].iso.trim());
+  if (blanks.length) {
+    errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please fill in ISO codes for: ${blanks.join(', ')}</div></div>`;
+    return;
+  }
+
+  // If selection changed, reset downstream state so Steps 3/4 rebuild
+  state.checkMappings = null;
+  state.confirmedRows = null;
+  state.results = null;
+  state.completedSteps.delete(3);
+  state.completedSteps.delete(4);
+  state.completedSteps.delete(5);
+
+  state.completedSteps.add(2);
+  goToStep(3);
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 3: CHECK MAPPING
+// ═══════════════════════════════════════════════════════════
+function getPlCombos() {
+  const seen = new Map();
+  state.pricelist.forEach(r => {
+    const key = `${r.productSpecific}||${r.productClass}`;
+    if (!seen.has(key)) seen.set(key, { ps: r.productSpecific, pc: r.productClass });
+  });
+  return [...seen.values()].sort((a,b) => a.ps.localeCompare(b.ps));
+}
+
+function getSelectedRows() {
+  if (!state.selectedCountries) return state.extractedRows;
+  return state.extractedRows.filter(r => state.selectedCountries.has(r.contractCountry));
+}
+
+async function renderStep3() {
+  // If we already have mappings (back navigation), just render
+  if (state.checkMappings && state.completedSteps.has(3)) {
+    renderStep3Table();
+    return;
+  }
+
+  const selectedRows = getSelectedRows();
+  const uniqueChecks = [...new Set(selectedRows.map(r => r.contractName))];
+  const plCombos = getPlCombos();
+
+  let html = `<div class="card">
+    <div class="card-title">Step 3 — Map Checks</div>
+    <div class="card-desc">Matching your contract check names to the pricelist. This may take a moment.</div>
+    ${clientSubtitle()}
+    <div id="step3-error"></div>
+    <div class="spinner-wrap"><div class="spinner"></div>Matching check names…</div>
+  </div>`;
+  setMain(html);
+
+  const checkList = uniqueChecks.map((c,i) => `${i+1}. ${c}`).join('\n');
+  const plList = plCombos.map(p => `${p.ps} (class: ${p.pc})`).join('\n');
+
+  const prompt = `Match each contract check name to the best pricelist entry.
+
+CONTRACT CHECK NAMES:
+${checkList}
+
+PRICELIST CHECK NAMES (format: "product_specific (class: product_class)"):
+${plList}
+
+For each contract check, find the best pricelist match.
+Return ONLY a JSON array:
+[
+  {
+    "contractName": "exact contract name as given",
+    "matchedPS": "exact product_specific from pricelist",
+    "matchedPC": "exact product_class from pricelist",
+    "confidence": "high|medium|low",
+    "reason": "brief reason"
+  }
+]
+
+Confidence rules:
+- high: exact or near-exact name match with no ambiguity
+- medium: reasonable inference but names differ meaningfully
+- low: ambiguous, multiple candidates, or no clear match
+
+Return ONLY the JSON array.`;
+
+  try {
+    const result = await callAI([{ role: 'user', content: prompt }], 4000);
+    let parsed = parseJsonFromAI(result);
+
+    if (!parsed || !Array.isArray(parsed)) throw new Error('AI returned invalid response for check matching.');
+
+    // Build mappings — add product_unique_id later dynamically
+    state.checkMappings = {};
+    uniqueChecks.forEach(c => {
+      const match = parsed.find(p => p.contractName === c);
+      state.checkMappings[c] = {
+        matchedPS: match ? match.matchedPS : '',
+        matchedPC: match ? match.matchedPC : '',
+        confidence: match ? match.confidence : 'low',
+        reason: match ? match.reason : 'No match found',
+        action: 'include' // include | skip | notincatalogue
+      };
+    });
+
+    renderStep3Table();
+  } catch(err) {
+    setMain(`<div class="card">
+      <div class="card-title">Step 3 — Map Checks</div>
+      ${clientSubtitle()}
+      <div class="alert alert-error"><span>⚠</span><div>${err.message}</div></div>
+      <div class="nav-row">${backBtn(2)}<div class="spacer"></div>
+        <button class="btn btn-primary" onclick="renderStep3()">Retry</button>
+      </div>
+    </div>`);
+  }
+}
+
+function renderStep3Table() {
+  const uniqueChecks = [...new Set(getSelectedRows().map(r => r.contractName))];
+  const plCombos = getPlCombos();
+
+  // Group by product class for optgroup dropdown
+  const byClass = {};
+  plCombos.forEach(p => {
+    if (!byClass[p.pc]) byClass[p.pc] = [];
+    byClass[p.pc].push(p);
+  });
+  const dropdownOpts = `<option value="">-- Not matched / Skip --</option>` +
+    Object.keys(byClass).sort().map(pc =>
+      `<optgroup label="${escHtml(pc)}">` +
+      byClass[pc].map(p => `<option value="${escHtml(p.ps)}||${escHtml(p.pc)}">${escHtml(p.ps)}</option>`).join('') +
+      `</optgroup>`
+    ).join('');
+
+  let html = `<div class="card">
+    <div class="card-title">Step 3 — Map Checks</div>
+    <div class="card-desc">Review the suggested check name matches below. Change any dropdown that looks wrong.</div>
+    ${clientSubtitle()}
+    <div class="alert alert-info" style="margin-bottom:16px">
+      <span>ℹ</span>
+      <div>
+        <strong>Skip</strong> — Exclude this check from the comparison entirely. Use this if the price is not relevant to this review or if you want to ignore it for now.<br>
+        <strong>Not in Catalogue</strong> — Use this if this check is not offered. It will appear in results as "Not in Catalogue" for your records.
+      </div>
+    </div>
+    <div id="step3-error"></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>#</th>
+        <th>Contract Check Name</th>
+        <th>Matched Pricelist Entry</th>
+        <th>Product unique ID</th>
+        <th>Confidence</th>
+        <th>Reason</th>
+        <th>Action</th>
+      </tr></thead>
+      <tbody>`;
+
+  uniqueChecks.forEach((c, i) => {
+    const m = state.checkMappings[c];
+    const selectedVal = m.matchedPS && m.matchedPC ? `${m.matchedPS}||${m.matchedPC}` : '';
+    const pid = selectedVal ? getPidForMatch(m.matchedPS, m.matchedPC) : '—';
+    const warn = (m.confidence === 'medium' || m.confidence === 'low') ? '<span class="tag-warn">⚠</span> ' : '';
+    const skipped = m.action === 'skip';
+    const nic = m.action === 'notincatalogue';
+    const rowClass = skipped || nic ? 'row-skipped' : '';
+
+    html += `<tr id="check-row-${i}" class="${rowClass}">
+      <td class="td-mono td-dim">${i+1}</td>
+      <td><strong>${escHtml(c)}</strong></td>
+      <td>
+        <select class="match-select" onchange="updateCheckMapping(${i}, '${escHtml(c)}', this.value)" ${skipped || nic ? 'disabled' : ''}>
+          ${dropdownOpts.replace(`value="${escHtml(selectedVal)}"`, `value="${escHtml(selectedVal)}" selected`)}
+        </select>
+      </td>
+      <td class="td-mono" id="pid-cell-${i}" style="font-size:11px;color:var(--text-muted)">${pid}</td>
+      <td><span class="badge badge-${m.confidence}">${warn}${m.confidence}</span></td>
+      <td class="td-dim" style="font-size:11px">${escHtml(m.reason)}</td>
+      <td>
+        <div class="gap-row">
+          <button class="btn btn-xs ${skipped ? 'btn-primary' : 'btn-ghost'}" onclick="toggleAction(${i}, '${escHtml(c)}', 'skip')">Skip</button>
+          <button class="btn btn-xs ${nic ? 'btn-danger' : 'btn-ghost'}" onclick="toggleAction(${i}, '${escHtml(c)}', 'notincatalogue')">Not in Catalogue</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>
+    <div class="nav-row">
+      ${backBtn(2)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="confirmMappings()">Confirm Mappings →</button>
+    </div>
+  </div>`;
+  setMain(html);
+}
+
+function getPidForMatch(ps, pc) {
+  const row = state.pricelist.find(r => r.productSpecific === ps && r.productClass === pc);
+  if (!row) return '—';
+  // Return the base ID pattern (without country)
+  return row.productUniqueId.split('.').slice(0,3).join('.') + '.*';
+}
+
+function updateCheckMapping(idx, contractName, val) {
+  if (!state.checkMappings[contractName]) return;
+  if (!val) {
+    state.checkMappings[contractName].matchedPS = '';
+    state.checkMappings[contractName].matchedPC = '';
+    const pidCell = $(`pid-cell-${idx}`);
+    if (pidCell) pidCell.textContent = '—';
+  } else {
+    const [ps, pc] = val.split('||');
+    state.checkMappings[contractName].matchedPS = ps;
+    state.checkMappings[contractName].matchedPC = pc;
+    const pidCell = $(`pid-cell-${idx}`);
+    if (pidCell) pidCell.textContent = getPidForMatch(ps, pc);
+  }
+}
+
+function toggleAction(idx, contractName, action) {
+  const m = state.checkMappings[contractName];
+  m.action = m.action === action ? 'include' : action;
+  renderStep3Table();
+}
+
+function confirmMappings() {
+  const errEl = $('step3-error');
+  const uniqueChecks = [...new Set(getSelectedRows().map(r => r.contractName))];
+  const unmapped = uniqueChecks.filter(c => {
+    const m = state.checkMappings[c];
+    return m.action === 'include' && (!m.matchedPS || !m.matchedPC);
+  });
+
+  if (unmapped.length) {
+    const proceed = confirm(`${unmapped.length} check(s) are not mapped and will be shown as "Not in Catalogue":\n\n${unmapped.join('\n')}\n\nContinue anyway?`);
+    if (!proceed) return;
+    unmapped.forEach(c => { state.checkMappings[c].action = 'notincatalogue'; });
+  }
+  state.completedSteps.add(3);
+  goToStep(4); // → Confirm Prices
+}
+
+// ═══════════════════════════════════════════════════════════
+// OLD STEP 4 (CURRENCY & FOREX) — kept for helper functions only
+// Currency is now confirmed in Step 2. Forex moved to Step 6 (Export CSV).
+// ═══════════════════════════════════════════════════════════
+function renderStep4() {
+  // Auto-detect currency from original text
+  if (!state.completedSteps.has(4)) {
+    const src = state.contractRawText || '';
+    let detected = 'USD';
+
+    // Check symbols first
+    for (const { sym, cur } of CURRENCY_DETECT) {
+      if (src.includes(sym)) { detected = cur; break; }
+    }
+
+    // If still USD, also check for currency codes as text (e.g. "(SGD)", "in GBP", "SGD pricing")
+    if (detected === 'USD') {
+      const codePatterns = ['SGD','GBP','EUR','AUD','MYR','PHP','NZD'];
+      for (const code of codePatterns) {
+        if (new RegExp(`\\b${code}\\b`).test(src)) { detected = code; break; }
+      }
+    }
+
+    state.currency = detected;
+    state.forexRate = FOREX[detected];
+  }
+
+  let html = `<div class="card">
+    <div class="card-title">Step 4 — Confirm Currency & Forex</div>
+    <div class="card-desc">Select the contract currency and confirm the forex rate. The highlighted row shows the selected currency. Default rates are valid for 2026.</div>
+    <div id="step4-error"></div>
+
+    <div class="two-col" style="max-width:600px">
+      <div>
+        <div class="field-label">CONTRACT CURRENCY</div>
+        <select id="currency-select" onchange="onCurrencyChange(this.value)" style="width:100%">
+          ${Object.keys(FOREX).map(c => `<option value="${c}" ${c===state.currency?'selected':''}>${c} — ${getCurrencyName(c)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div class="field-label">FOREX RATE (units per USD)</div>
+        <input type="number" id="forex-input" value="${state.forexRate}" min="0.0001" step="0.0001" style="width:100%" oninput="state.forexRate=parseFloat(this.value)||0">
+        <div class="field-hint">Default rates valid for 2026. Update if using a different rate.</div>
+      </div>
+    </div>
+
+    <div class="mt-20">
+      <div class="section-title">Band A reference prices — all currencies</div>
+      <div class="field-hint" style="margin-bottom:12px">Use this to verify the selected currency looks right. Highlighted row = currently selected currency.</div>
+      <div class="table-wrap" id="sanity-table">
+        ${renderSanityTable()}
+      </div>
+    </div>
+
+    <div class="nav-row">
+      ${backBtn(3)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="confirmForex()">Confirm →</button>
+    </div>
+  </div>`;
+  setMain(html);
+}
+
+function getCurrencyName(c) {
+  const names = { USD:'US Dollar', EUR:'Euro', GBP:'British Pound', AUD:'Australian Dollar', SGD:'Singapore Dollar', MYR:'Malaysian Ringgit', NZD:'New Zealand Dollar', PHP:'Philippine Peso' };
+  return names[c] || c;
+}
+
+const SANITY_TARGETS = [
+  { label: 'Employment Check (GB)', ps: 'Employment check', cc: 'GB' },
+  { label: 'Criminal Record Check (GB)', ps: 'Criminal Record check', cc: 'GB' },
+  { label: 'Education Check (GB)', ps: 'Education check', cc: 'GB' },
+  { label: 'Address Check (GB)', ps: 'Address check', cc: 'GB' }
+];
+
+function renderSanityTable() {
+  const currencies = Object.keys(FOREX);
+  // Find which targets exist in pricelist
+  const validTargets = SANITY_TARGETS.filter(t =>
+    state.pricelist.find(r => r.productSpecific === t.ps && r.countryCode === t.cc)
+  );
+  if (!validTargets.length) return `<div class="td-dim" style="padding:12px;font-size:12px">No sample checks found in pricelist.</div>`;
+
+  let html = `<table><thead><tr>
+    <th>Currency</th>
+    ${validTargets.map(t => `<th>${t.label}</th>`).join('')}
+    <th>Forex Rate</th>
+  </tr></thead><tbody>`;
+
+  currencies.forEach(cur => {
+    const isSelected = cur === state.currency;
+    const rowStyle = isSelected ? 'background:var(--surface3);outline:1px solid var(--accent);' : '';
+    const sym = CURRENCY_SYMBOLS[cur] || cur;
+    html += `<tr style="${rowStyle}" onclick="selectCurrencyRow('${cur}')" title="Click to select ${cur}" style="cursor:pointer">`;
+    html += `<td><span class="mono" style="font-weight:600;${isSelected?'color:var(--accent)':''}">${cur}</span> ${isSelected ? '← selected' : ''}<br><span style="font-size:10px;color:var(--text-dim)">${getCurrencyName(cur)}</span></td>`;
+    validTargets.forEach(t => {
+      const plRow = state.pricelist.find(r => r.productSpecific === t.ps && r.countryCode === t.cc);
+      const price = plRow ? plRow.prices[cur]?.A : null;
+      html += `<td class="td-mono">${price !== null && price !== undefined ? sym + price.toFixed(2) : '—'}</td>`;
+    });
+    html += `<td class="td-mono td-dim">${FOREX[cur]}</td>`;
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>`;
+  return html;
+}
+
+function selectCurrencyRow(cur) {
+  state.currency = cur;
+  state.forexRate = FOREX[cur];
+  $('currency-select').value = cur;
+  $('forex-input').value = cur === 'USD' ? '1.0' : FOREX[cur];
+  $('sanity-table').innerHTML = renderSanityTable();
+}
+
+function onCurrencyChange(cur) {
+  state.currency = cur;
+  state.forexRate = FOREX[cur];
+  $('forex-input').value = state.forexRate;
+  $('sanity-table').innerHTML = renderSanityTable();
+}
+
+function confirmForex() {
+  const errEl = $('step4-error');
+  const rate = parseFloat($('forex-input').value);
+  if (!rate || rate <= 0 || isNaN(rate)) {
+    errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Please enter a valid positive forex rate.</div></div>`;
+    return;
+  }
+  state.forexRate = rate;
+  state.currency = $('currency-select').value;
+  state.completedSteps.add(4);
+  goToStep(5);
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 4: CONFIRM PRICES (was Step 5)
+// ═══════════════════════════════════════════════════════════
+function renderStep4() {
+  if (!state.confirmedRows) {
+    // Build rows from selected-country extracted data + mappings
+    const selectedRows = getSelectedRows();
+    state.confirmedRows = selectedRows.map((r, i) => {
+      const mapping = state.checkMappings[r.contractName] || {};
+      const iso = state.countryMappings[r.contractCountry]?.iso || r.contractCountry;
+      const plRow = mapping.matchedPS && mapping.matchedPC && iso ?
+        state.pricelist.find(p => p.productSpecific === mapping.matchedPS && p.productClass === mapping.matchedPC && p.countryCode === iso) : null;
+      // NA rows: pre-skip, null price
+      const isNA = !!r.isNA;
+      return {
+        id: i,
+        contractName: r.contractName,
+        contractCountry: r.contractCountry,
+        isoCode: iso,
+        matchedPS: mapping.matchedPS || '',
+        matchedPC: mapping.matchedPC || '',
+        productUniqueId: plRow ? plRow.productUniqueId : '',
+        price: isNA ? null : r.price,
+        action: isNA ? 'skip' : (mapping.action || 'include'),
+        isNA,
+        available: plRow ? plRow.availability : 'Unknown'
+      };
+    });
+  }
+
+  const naCount = state.confirmedRows.filter(r => r.isNA).length;
+  let html = `<div class="card">
+    <div class="card-title">Step 4 — Confirm Prices</div>
+    <div class="card-desc">Review and correct any prices before the comparison runs. Prices are in <strong>${state.currency}</strong>.</div>
+    ${clientSubtitle()}
+    <div class="alert alert-info" style="margin-bottom:${naCount ? '8px' : '16px'}"><span>ℹ</span><div><strong>Skip</strong> — Exclude a row from the comparison. You can also edit any price directly in the table.</div></div>
+    ${naCount ? `<div class="alert alert-warn" style="margin-bottom:16px"><span>ℹ</span><div><strong>${naCount} N/A row${naCount > 1 ? 's' : ''}</strong> from the contract are shown greyed out below — these checks are listed as not applicable for those countries. They are pre-set to Skip but you can include them if needed.</div></div>` : ''}
+    <div id="step4-error"></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>#</th>
+        <th>Contract Check Name</th>
+        <th>Country</th>
+        <th>Pricelist Match</th>
+        <th>Product unique ID</th>
+        <th>Contract Price (${state.currency})</th>
+        <th>Available</th>
+        <th>Action</th>
+      </tr></thead>
+      <tbody>`;
+
+  state.confirmedRows.forEach((r, i) => {
+    const skipped = r.action === 'skip' || r.action === 'notincatalogue';
+    const rowClass = r.isNA ? 'row-skipped' : (skipped ? 'row-skipped' : (r.available === 'No' ? 'row-unavailable' : ''));
+    const matchLabel = r.matchedPS ? `${escHtml(r.matchedPS)}<br><span style="font-size:10px;color:var(--text-dim)">${escHtml(r.matchedPC)}</span>` : '<span class="td-dim">—</span>';
+    const actionLabel = r.action === 'notincatalogue' ? 'Not in Catalogue' : '';
+
+    // Price cell: NA rows show badge, others show editable input
+    const priceCell = r.isNA
+      ? `<span class="badge badge-catalogue" style="font-size:11px">N/A in contract</span>`
+      : `<input class="price-input" type="number" id="price-inp-${i}" value="${r.price != null ? r.price : ''}" min="0" step="0.01" oninput="state.confirmedRows[${i}].price=parseFloat(this.value)||0" ${skipped ? 'disabled' : ''}>`;
+
+    html += `<tr id="conf-row-${i}" class="${rowClass}">
+      <td class="td-mono td-dim">${i+1}</td>
+      <td>
+        <strong>${escHtml(r.contractName)}</strong>
+        ${r.isNA ? '<br><span style="font-size:10px;color:var(--text-dim)">not applicable in contract</span>' : ''}
+      </td>
+      <td class="td-mono">${escHtml(r.contractCountry)} → <strong>${r.isoCode}</strong></td>
+      <td>${matchLabel}</td>
+      <td class="td-mono" style="font-size:11px;color:var(--text-muted)">${r.productUniqueId || '—'}</td>
+      <td>${priceCell}</td>
+      <td><span class="badge ${r.available==='Yes'?'badge-banded':'badge-unavailable'}">${r.available}</span></td>
+      <td>
+        <div class="gap-row">
+          <button class="btn btn-xs ${r.action==='skip'?'btn-primary':'btn-ghost'}" onclick="toggleStep5Action(${i},'skip')">${r.action==='skip'?'Unskip':'Skip'}</button>
+          ${actionLabel ? `<span class="badge badge-catalogue">${actionLabel}</span>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>
+    <div class="nav-row">
+      ${backBtn(3)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="runComparison()">Run Comparison →</button>
+    </div>
+  </div>`;
+  setMain(html);
+}
+
+function toggleStep5Action(idx, action) {
+  const r = state.confirmedRows[idx];
+  if (r.action === action) r.action = 'include';
+  else r.action = action;
+  renderStep4();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 6: RESULTS
+// ═══════════════════════════════════════════════════════════
+function runComparison() {
+  try {
+    state.results = state.confirmedRows.map(r => {
+      if (r.action === 'skip') return { ...r, status: 'skipped' };
+      if (r.action === 'notincatalogue') return { ...r, status: 'notincatalogue' };
+
+      // Find pricelist row by product unique ID
+      const plRow = r.productUniqueId ?
+        state.pricelist.find(p => p.productUniqueId === r.productUniqueId) : null;
+
+      if (!plRow) return { ...r, status: 'notfound', bands: null };
+      if (plRow.availability !== 'Yes') return { ...r, status: 'unavailable', bands: null };
+
+      const pricesForCurrency = (plRow.prices && plRow.prices[state.currency]) ? plRow.prices[state.currency] : {};
+      const bands = {
+        A: pricesForCurrency.A ?? null,
+        B: pricesForCurrency.B ?? null,
+        C: pricesForCurrency.C ?? null,
+        D: pricesForCurrency.D ?? null
+      };
+
+      const price = r.price;
+      const bandKeys = ['A','B','C','D'];
+
+      // Exact match check
+      const matchedBand = bandKeys.find(b => bands[b] !== null && bands[b] === price);
+      if (matchedBand) {
+        return { ...r, status: 'banded', bands, matchedBand, closestBand: matchedBand, deviationAmt: 0, deviationPct: 0 };
+      }
+
+      // Custom — find closest band
+      let closestBand = null, minDiff = Infinity;
+      bandKeys.forEach(b => {
+        if (bands[b] === null) return;
+        const diff = Math.abs(price - bands[b]);
+        if (diff < minDiff) { minDiff = diff; closestBand = b; }
+      });
+
+      // Deviation: closest band price − contract price (positive = band is higher than contract)
+      const devAmt = closestBand ? bands[closestBand] - price : null;
+      const devPct = closestBand && price ? ((bands[closestBand] / price) - 1) * 100 : null;
+
+      return { ...r, status: 'custom', bands, matchedBand: null, closestBand, deviationAmt: devAmt, deviationPct: devPct };
+    });
+
+    state.completedSteps.add(4);
+    state.completedSteps.add(5);
+    goToStep(5);
+  } catch(err) {
+    const errEl = $('step4-error');
+    if (errEl) errEl.innerHTML = `<div class="alert alert-error"><span>⚠</span><div>Comparison failed: ${err.message}</div></div>`;
+    console.error('runComparison error:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 5: RESULTS (was Step 6)
+// ═══════════════════════════════════════════════════════════
+function renderStep5() {
+  const results = state.results;
+  const sym = CURRENCY_SYMBOLS[state.currency] || state.currency;
+
+  const total = results.filter(r => r.status !== 'skipped').length;
+  const banded = results.filter(r => r.status === 'banded').length;
+  const custom = results.filter(r => r.status === 'custom').length;
+  const notfound = results.filter(r => r.status === 'notfound').length;
+  const nic = results.filter(r => r.status === 'notincatalogue').length;
+  const unavail = results.filter(r => r.status === 'unavailable').length;
+
+  const customRows = results.filter(r => r.status === 'custom');
+  const bandAnalysis = computeBandAnalysis(customRows, sym);
+
+  const allCols = [
+    { key: 'check', label: 'Check' },
+    { key: 'pid', label: 'Product ID' },
+    { key: 'country', label: 'Country' },
+    { key: 'price', label: 'Current Contract Price' },
+    { key: 'bandA', label: 'Band A' },
+    { key: 'bandB', label: 'Band B' },
+    { key: 'bandC', label: 'Band C' },
+    { key: 'bandD', label: 'Band D' },
+    { key: 'available', label: 'Available' },
+    { key: 'status', label: 'Status' },
+    { key: 'closest', label: 'Closest Band' },
+    { key: 'devAmt', label: 'Deviation Amt' },
+    { key: 'devPct', label: 'Deviation %' }
+  ];
+
+  const togglesHtml = `<div class="col-toggle-wrap">
+    <span class="col-toggle-label">Show/hide columns:</span>
+    ${allCols.map(c => `<span class="col-toggle-btn ${state.visibleCols.has(c.key)?'active':''}" onclick="toggleCol('${c.key}')">${c.label}</span>`).join('')}
+  </div>`;
+
+  let html = `<div class="card">
+    <div class="card-title">Step 5 — Results</div>
+    <div class="card-desc">Comparison complete. Currency: <strong>${state.currency}</strong></div>
+    ${clientSubtitle()}
+    <div id="step5-error"></div>
+
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-num mono">${total}</div><div class="stat-label">Total</div></div>
+      <div class="stat-box" style="border-color:#1a5c3a"><div class="stat-num mono text-green">${banded}</div><div class="stat-label">Banded</div></div>
+      <div class="stat-box" style="border-color:#5c1a1a"><div class="stat-num mono text-red">${custom}</div><div class="stat-label">Custom</div></div>
+      <div class="stat-box" style="border-color:#5c3a00"><div class="stat-num mono text-amber">${notfound}</div><div class="stat-label">Not Found</div></div>
+      <div class="stat-box"><div class="stat-num mono" style="color:var(--grey)">${nic}</div><div class="stat-label">Not in Cat.</div></div>
+      <div class="stat-box"><div class="stat-num mono" style="color:var(--darkgrey)">${unavail}</div><div class="stat-label">Unavailable</div></div>
+    </div>
+
+    ${customRows.length ? `<div class="band-analysis" style="margin-bottom:28px">
+      <div class="band-analysis-title">Band Analysis — Custom Checks Only</div>
+      <div class="field-hint" style="margin-bottom:14px">Shows what would happen to pricing if custom-priced checks were moved to each standard band. Positive = band price is higher than current contract price.</div>
+      ${renderBandAnalysis(bandAnalysis, sym)}
+    </div>
+
+    <div style="margin-bottom:28px">${renderInsightCards(customRows, bandAnalysis, sym)}</div>` : ''}
+
+    <hr class="divider">
+
+    <div class="gap-row" style="margin-bottom:12px">
+      <button class="btn btn-secondary btn-sm" onclick="downloadResultsCsv()">⬇ Download Results CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyResultsTable()">⎘ Copy Table</button>
+    </div>
+
+    ${togglesHtml}
+    <div class="table-wrap" id="results-table-wrap">
+      ${renderResultsTable(results, allCols, sym)}
+    </div>
+
+    <div class="nav-row">
+      ${backBtn(4)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="goToStep(6)">Export CSV →</button>
+    </div>
+  </div>`;
+  setMain(html);
+
+  if (customRows.length) renderBandChart(bandAnalysis);
+}
+
+function renderResultsTable(results, allCols, sym) {
+  const v = state.visibleCols;
+  const bandCols = ['bandA','bandB','bandC','bandD'];
+  const anyBandVisible = bandCols.some(k => v.has(k));
+
+  // Build header — with spanning group label for band columns
+  let html = `<table><thead>`;
+
+  // Row 1: group header for band columns
+  if (anyBandVisible) {
+    html += `<tr>`;
+    allCols.forEach(c => {
+      if (!v.has(c.key)) return;
+      if (c.key === 'bandA') {
+        const count = bandCols.filter(k => v.has(k)).length;
+        html += `<th colspan="${count}" style="text-align:center;background:var(--surface3);color:var(--text-muted);font-size:10px;letter-spacing:0.08em">CURRENT 2026 BANDED PRICES</th>`;
+      } else if (!bandCols.includes(c.key)) {
+        html += `<th rowspan="2" style="vertical-align:bottom">${c.label}</th>`;
+      }
+    });
+    html += `</tr>`;
+  }
+
+  // Row 2: column headers
+  html += `<tr>`;
+  allCols.forEach(c => {
+    if (!v.has(c.key)) return;
+    if (anyBandVisible && !bandCols.includes(c.key)) return; // already added in row 1
+    const bandLetter = c.key.replace('band','');
+    const bc = BAND_COLORS[bandLetter];
+    if (bc) {
+      html += `<th style="color:${bc.main};border-bottom:2px solid ${bc.main}">${c.label}</th>`;
+    } else {
+      html += `<th>${c.label}</th>`;
+    }
+  });
+  html += `</tr></thead><tbody>`;
+
+  results.forEach(r => {
+    if (r.status === 'skipped') return;
+    const rowClass = r.status === 'unavailable' ? 'row-unavailable' : '';
+    html += `<tr class="${rowClass}">`;
+
+    if (v.has('check')) html += `<td><div style="font-size:12px"><strong>${escHtml(r.contractName)}</strong></div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">${escHtml(r.matchedPS || '')} ${r.matchedPC?'('+escHtml(r.matchedPC)+')':''}</div></td>`;
+    if (v.has('pid')) html += `<td class="td-mono" style="font-size:11px;color:var(--text-muted)">${escHtml(r.productUniqueId || '—')}</td>`;
+    if (v.has('country')) html += `<td class="td-mono">${escHtml(r.contractCountry)}<br><strong>${r.isoCode}</strong></td>`;
+    if (v.has('price')) html += `<td class="td-mono">${sym}${r.price !== null && r.price !== undefined ? r.price.toFixed(2) : '—'}</td>`;
+
+    const bandKeys2 = [{key:'bandA',b:'A'},{key:'bandB',b:'B'},{key:'bandC',b:'C'},{key:'bandD',b:'D'}];
+    bandKeys2.forEach(({key, b}) => {
+      if (!v.has(key)) return;
+      if (!r.bands) { html += `<td class="td-dim">—</td>`; return; }
+      const val = r.bands[b];
+      const isMatched = r.matchedBand === b;
+      const bc = BAND_COLORS[b];
+      let cellStyle = `font-family:'IBM Plex Mono',monospace;`;
+      if (isMatched) cellStyle += `background:${bc.bg};color:${bc.main};font-weight:600;`;
+      else cellStyle += `color:var(--text-muted);`;
+      html += `<td style="${cellStyle}">${val != null ? sym + val.toFixed(2) : '—'}</td>`;
+    });
+
+    if (v.has('available')) html += `<td><span class="badge ${r.available==='Yes'?'badge-banded':'badge-unavailable'}">${r.available||'—'}</span></td>`;
+    if (v.has('status')) html += `<td>${getStatusBadge(r.status)}</td>`;
+    if (v.has('closest')) {
+      const cb = r.closestBand;
+      const cbc = cb ? BAND_COLORS[cb] : null;
+      html += `<td class="td-mono" style="${cbc?'color:'+cbc.main+';font-weight:600':''}">
+        ${cb ? `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${cbc.bg};border:1px solid ${cbc.main}">Band ${cb}</span>` : '—'}
+      </td>`;
+    }
+    // Deviation: positive = band is higher than contract (client would pay more to move to band)
+    //            negative = band is lower than contract (client is overpaying vs band)
+    if (v.has('devAmt')) {
+      const da = r.deviationAmt;
+      const daClass = da != null ? (da > 0 ? 'text-green' : da < 0 ? 'text-red' : '') : '';
+      html += `<td class="td-mono ${daClass}">${da != null ? (da >= 0 ? '+' : '') + sym + Math.abs(da).toFixed(2) + (da < 0 ? ' ▼' : da > 0 ? ' ▲' : '') : '—'}</td>`;
+    }
+    if (v.has('devPct')) {
+      const dp = r.deviationPct;
+      const dpClass = dp != null ? (dp > 0 ? 'text-green' : dp < 0 ? 'text-red' : '') : '';
+      html += `<td class="td-mono ${dpClass}">${dp != null ? (dp >= 0 ? '+' : '') + dp.toFixed(1) + '%' : '—'}</td>`;
+    }
+
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+
+function getStatusBadge(status) {
+  const map = {
+    banded: '<span class="badge badge-banded">Banded</span>',
+    custom: '<span class="badge badge-custom">Custom</span>',
+    notfound: '<span class="badge badge-notfound">Not Found</span>',
+    notincatalogue: '<span class="badge badge-catalogue">Not in Catalogue</span>',
+    unavailable: '<span class="badge badge-unavailable">Unavailable</span>'
+  };
+  return map[status] || status;
+}
+
+function toggleCol(key) {
+  if (state.visibleCols.has(key)) state.visibleCols.delete(key);
+  else state.visibleCols.add(key);
+  renderStep5();
+}
+
+function computeBandAnalysis(customRows, sym) {
+  const bands = ['A','B','C','D'];
+  return bands.map(b => {
+    const validRows = customRows.filter(r => r.bands && r.bands[b] !== null && r.price !== null);
+    if (!validRows.length) return { band: b, avgPct: null, avgAmt: null };
+    const pctChanges = validRows.map(r => ((r.bands[b] - r.price) / r.price) * 100);
+    const amtChanges = validRows.map(r => r.bands[b] - r.price);
+    const avgPct = pctChanges.reduce((a,c) => a+c, 0) / pctChanges.length;
+    const avgAmt = amtChanges.reduce((a,c) => a+c, 0) / amtChanges.length;
+    return { band: b, avgPct, avgAmt };
+  });
+}
+
+function renderBandAnalysis(analysis, sym) {
+  let html = `<div class="band-analysis-grid">
+    <div>
+      <div class="section-title">Summary Table</div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>Band</th><th>Avg % Change</th><th>Avg Amount Change per Check</th></tr></thead>
+        <tbody>`;
+  analysis.forEach(a => {
+    if (a.avgPct == null) { html += `<tr><td class="td-mono">Band ${a.band}</td><td class="td-dim">—</td><td class="td-dim">—</td></tr>`; return; }
+    const pctClass = a.avgPct > 0 ? 'text-green' : 'text-red';
+    const amtClass = a.avgAmt > 0 ? 'text-green' : 'text-red';
+    html += `<tr>
+      <td class="td-mono">Band ${a.band}</td>
+      <td class="td-mono ${pctClass}">${a.avgPct >= 0 ? '+' : ''}${a.avgPct.toFixed(1)}%</td>
+      <td class="td-mono ${amtClass}">${a.avgAmt >= 0 ? '+' : ''}${sym}${Math.abs(a.avgAmt).toFixed(2)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>
+    </div>
+    <div>
+      <div class="section-title">Bar Chart</div>
+      <div class="chart-wrap"><canvas id="band-chart"></canvas></div>
+    </div>
+  </div>`;
+  return html;
+}
+
+let _bandChartInstance = null;
+function renderBandChart(analysis) {
+  const ctx = document.getElementById('band-chart');
+  if (!ctx) return;
+  if (_bandChartInstance) { _bandChartInstance.destroy(); _bandChartInstance = null; }
+
+  const sym = CURRENCY_SYMBOLS[state.currency] || state.currency;
+  const customRows = state.results.filter(r => r.status === 'custom');
+  const avgContractPrice = customRows.reduce((sum, r) => sum + r.price, 0) / customRows.length;
+
+  const labels = analysis.map(a => 'Band ' + a.band);
+  const bandPrices = analysis.map(a => {
+    const rows = customRows.filter(r => r.bands && r.bands[a.band] !== null);
+    if (!rows.length) return null;
+    return rows.reduce((sum, r) => sum + r.bands[a.band], 0) / rows.length;
+  });
+  const pctChanges = analysis.map(a => a.avgPct !== null ? parseFloat(a.avgPct.toFixed(2)) : null);
+  const barColors = ['A','B','C','D'].map(b => BAND_COLORS[b].bg);
+  const borderColors = ['A','B','C','D'].map(b => BAND_COLORS[b].main);
+
+  _bandChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Avg Band Price',
+          data: bandPrices,
+          backgroundColor: barColors,
+          borderColor: borderColors,
+          borderWidth: 2,
+          yAxisID: 'yPrice',
+          order: 2
+        },
+        {
+          type: 'line',
+          label: 'Avg Contract Price',
+          data: labels.map(() => avgContractPrice),
+          borderColor: '#e8eaf6',
+          borderWidth: 2,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          fill: false,
+          yAxisID: 'yPrice',
+          order: 1
+        },
+        {
+          type: 'line',
+          label: '% Change',
+          data: pctChanges,
+          borderColor: '#f39c12',
+          backgroundColor: 'rgba(243,156,18,0.1)',
+          borderWidth: 2,
+          pointRadius: 5,
+          pointBackgroundColor: '#f39c12',
+          fill: false,
+          yAxisID: 'yPct',
+          order: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#8b93b8', font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              if (ctx.dataset.label === '% Change') return `% Change: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw?.toFixed(1)}%`;
+              if (ctx.dataset.label === 'Avg Contract Price') return `Avg Contract Price: ${sym}${ctx.raw?.toFixed(2)}`;
+              return `${ctx.dataset.label}: ${sym}${ctx.raw?.toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        yPrice: {
+          type: 'linear',
+          position: 'left',
+          ticks: { color: '#8b93b8', callback: v => sym + v.toFixed(0) },
+          grid: { color: '#2e3350' },
+          title: { display: true, text: `Price (${state.currency})`, color: '#5a6080', font: { size: 10 } }
+        },
+        yPct: {
+          type: 'linear',
+          position: 'right',
+          ticks: { color: '#f39c12', callback: v => (v >= 0 ? '+' : '') + v + '%' },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: '% Change', color: '#f39c12', font: { size: 10 } }
+        },
+        x: { ticks: { color: '#8b93b8' }, grid: { color: '#2e3350' } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// INSIGHT CARDS
+// ═══════════════════════════════════════════════════════════
+function renderInsightCards(customRows, bandAnalysis, sym) {
+  if (!customRows.length) return '';
+
+  // ── Card 1: Pricing Position ──
+  const belowBand = customRows.filter(r => r.deviationAmt !== null && r.deviationAmt > 0).length;  // band > contract
+  const aboveBand = customRows.filter(r => r.deviationAmt !== null && r.deviationAmt < 0).length;  // band < contract
+  const total = customRows.length;
+  const belowPct = total ? Math.round((belowBand / total) * 100) : 0;
+  const abovePct = total ? Math.round((aboveBand / total) * 100) : 0;
+
+  let positionIcon, positionTitle, positionText, positionBg;
+  if (belowPct >= 70) {
+    positionIcon = '📉'; positionTitle = 'Mostly Below Banded Prices';
+    positionText = `${belowPct}% of custom-priced checks are below their nearest band price — there may be room to move these to standard pricing.`;
+    positionBg = 'var(--amber-bg)';
+  } else if (abovePct >= 70) {
+    positionIcon = '📈'; positionTitle = 'Mostly Above Banded Prices';
+    positionText = `${abovePct}% of custom-priced checks are priced above their nearest band — this contract is pricing above standard for these checks.`;
+    positionBg = 'var(--green-bg)';
+  } else {
+    positionIcon = '↔️'; positionTitle = 'Mixed Pricing Position';
+    positionText = `${belowPct}% of custom checks are below their nearest band and ${abovePct}% are above — pricing is spread across bands.`;
+    positionBg = 'rgba(45,142,255,0.08)';
+  }
+
+  // ── Card 2: Dominant Band ──
+  const bandCounts = { A: 0, B: 0, C: 0, D: 0 };
+  customRows.forEach(r => { if (r.closestBand) bandCounts[r.closestBand]++; });
+  const sorted = Object.entries(bandCounts).sort((a, b) => b[1] - a[1]);
+  const [domBand, domCount] = sorted[0];
+  const domPct = total ? Math.round((domCount / total) * 100) : 0;
+  const domBc = BAND_COLORS[domBand] || {};
+  const domAnalysis = bandAnalysis.find(a => a.band === domBand);
+  const domAvgPct = domAnalysis && domAnalysis.avgPct !== null ? domAnalysis.avgPct.toFixed(1) : null;
+
+  // ── Card 3: Recommendation ──
+  const validBands = bandAnalysis.filter(a => a.avgPct !== null);
+
+  // Find the band closest to 0% change (least disruption)
+  const closestToZero = [...validBands].sort((a, b) => Math.abs(a.avgPct) - Math.abs(b.avgPct))[0];
+  // Also find the cheapest positive-change band (least cost increase)
+  const positiveBands = validBands.filter(a => a.avgPct >= 0).sort((a, b) => a.avgPct - b.avgPct);
+  const bestUpBand = positiveBands[0] || null;
+
+  // Outlier detection — flag if any single check devPct > 1.5× mean absolute devPct
+  const devPcts = customRows.filter(r => r.deviationPct !== null).map(r => Math.abs(r.deviationPct));
+  const meanAbsDev = devPcts.length ? devPcts.reduce((a, b) => a + b, 0) / devPcts.length : 0;
+  const outlierRows = customRows.filter(r => r.deviationPct !== null && Math.abs(r.deviationPct) > 1.5 * meanAbsDev && meanAbsDev > 0);
+
+  let recIcon, recTitle, recText, recBg;
+  if (bestUpBand && bestUpBand.avgPct <= 10) {
+    recIcon = '✅';
+    recTitle = `Move to Band ${bestUpBand.band} — within 10% threshold`;
+    recText = `Moving all custom-priced checks to <strong>Band ${bestUpBand.band}</strong> would mean an average price increase of <strong>${bestUpBand.avgPct >= 0 ? '+' : ''}${bestUpBand.avgPct.toFixed(1)}%</strong> — within the acceptable 10% threshold.`;
+    recBg = 'var(--green-bg)';
+  } else if (closestToZero && closestToZero.avgPct < 0 && Math.abs(closestToZero.avgPct) <= 10) {
+    recIcon = '✅';
+    recTitle = `Band ${closestToZero.band} is the closest match`;
+    recText = `Moving to <strong>Band ${closestToZero.band}</strong> would mean an average change of <strong>${closestToZero.avgPct >= 0 ? '+' : ''}${closestToZero.avgPct.toFixed(1)}%</strong> — within 10% of current pricing.`;
+    recBg = 'var(--green-bg)';
+  } else {
+    recIcon = '⚠️';
+    recTitle = 'No standard band is within 10% — custom pricing recommended';
+    const nearestBand = closestToZero;
+    recText = `The closest standard band is <strong>Band ${nearestBand ? nearestBand.band : '—'}</strong> at an average change of <strong>${nearestBand && nearestBand.avgPct !== null ? (nearestBand.avgPct >= 0 ? '+' : '') + nearestBand.avgPct.toFixed(1) + '%' : '—'}</strong>. Custom pricing should be retained or negotiated.`;
+    recBg = 'var(--amber-bg)';
+  }
+
+  const outlierNote = outlierRows.length
+    ? `<div style="margin-top:10px;padding:10px 14px;background:rgba(245,166,35,0.1);border-left:3px solid var(--amber);border-radius:4px;font-size:12px;color:var(--amber)">
+        ⚠ <strong>${outlierRows.length} outlier${outlierRows.length > 1 ? 's' : ''} detected</strong> — ${outlierRows.map(r => escHtml(r.contractName)).join(', ')} ${outlierRows.length === 1 ? 'has' : 'have'} a deviation more than 1.5× the average and may be pulling the overall figures. Consider reviewing these separately.
+       </div>`
+    : '';
+
+  const cardStyle = (bg) => `background:${bg};border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px 20px;`;
+
+  return `
+    <div class="band-analysis-title" style="margin-bottom:14px">Pricing Insights</div>
+    <div class="three-col">
+      <div style="${cardStyle(positionBg)}">
+        <div style="font-size:18px;margin-bottom:8px">${positionIcon}</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">${positionTitle}</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.5">${positionText}</div>
+      </div>
+      <div style="${cardStyle('rgba(45,142,255,0.08)')}">
+        <div style="font-size:18px;margin-bottom:8px">🎯</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Dominant Band: <span style="color:${domBc.main||'var(--accent)'}">Band ${domBand}</span></div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.5">${domPct}% of custom-priced checks (${domCount} of ${total}) are closest to <strong style="color:${domBc.main||'var(--accent)'}">Band ${domBand}</strong>${domAvgPct !== null ? ', which would mean an average change of <strong>' + (Number(domAvgPct) >= 0 ? '+' : '') + domAvgPct + '%</strong>' : ''}.</div>
+      </div>
+      <div style="${cardStyle(recBg)}">
+        <div style="font-size:18px;margin-bottom:8px">${recIcon}</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">${recTitle}</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.5">${recText}${outlierNote}</div>
+      </div>
+    </div>`;
+}
+
+function downloadResultsCsv() {
+  const results = state.results.filter(r => r.status !== 'skipped');
+  const sym = state.currency;
+  const headers = ['Contract Check','Pricelist Match','Product unique ID','Country','Contract Price ('+sym+')','Band A','Band B','Band C','Band D','Available','Status','Closest Band','Deviation Amount','Deviation %'];
+  const rows = results.map(r => [
+    r.contractName, r.matchedPS || '', r.productUniqueId || '',
+    r.isoCode, r.price,
+    r.bands?.A ?? '', r.bands?.B ?? '', r.bands?.C ?? '', r.bands?.D ?? '',
+    r.available || '',
+    r.status, r.closestBand ? 'Band '+r.closestBand : '',
+    r.deviationAmt !== null ? r.deviationAmt.toFixed(2) : '',
+    r.deviationPct !== null ? r.deviationPct.toFixed(1)+'%' : ''
+  ]);
+  const safeClient = state.clientName ? state.clientName.replace(/[^a-z0-9_\-\. ]/gi, '').trim().replace(/\s+/g, '_') : 'results';
+  downloadCsvData([headers, ...rows], `${safeClient}_results.csv`);
+}
+
+function copyResultsTable() {
+  const tbl = document.querySelector('#results-table-wrap table');
+  if (!tbl) return;
+  const range = document.createRange();
+  range.selectNode(tbl);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  document.execCommand('copy');
+  window.getSelection().removeAllRanges();
+  showToast('Table copied to clipboard');
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 6: EXPORT CSV (was Step 7)
+// ═══════════════════════════════════════════════════════════
+function renderStep6() {
+  const customResults = state.results.filter(r => r.status === 'custom');
+  const sym = CURRENCY_SYMBOLS[state.currency] || state.currency;
+
+  // Initialise forex rate if not already set
+  if (!state.forexRate) state.forexRate = FOREX[state.currency] || 1.0;
+
+  if (!customResults.length) {
+    setMain(`<div class="card">
+      <div class="card-title">Step 6 — Export CSV</div>
+      ${clientSubtitle()}
+      <div class="alert alert-success mt-16"><span>✓</span><div><strong>All checks are banded.</strong> No custom pricing CSV needed.</div></div>
+      <div class="nav-row">${backBtn(5)}</div>
+    </div>`);
+    return;
+  }
+
+  let html = `<div class="card">
+    <div class="card-title">Step 6 — Export CSV</div>
+    <div class="card-desc">Custom-priced checks only. The amount column is in USD (rounded to whole number). All other columns are unchanged from the template.</div>
+    ${clientSubtitle()}
+
+    <div style="max-width:500px;margin-bottom:24px;padding:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)">
+      <div class="field-label">FOREX RATE — ${state.currency} per USD</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+        <input type="number" id="forex-final-input" value="${state.forexRate}" min="0.0001" step="0.0001" style="width:160px;font-family:'IBM Plex Mono',monospace" oninput="state.forexRate=parseFloat(this.value)||state.forexRate">
+        <span style="font-size:12px;color:var(--text-muted)">Default rate valid for 2026. Update if needed.</span>
+      </div>
+      <div id="forex-error" style="margin-top:6px"></div>
+    </div>
+
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Contract Check</th>
+        <th>Country Code</th>
+        <th>Product unique ID</th>
+        <th>Contract Price (${state.currency})</th>
+        <th>USD Amount (rounded)</th>
+      </tr></thead>
+      <tbody>`;
+
+  customResults.forEach(r => {
+    const usdAmt = Math.round(r.price / state.forexRate);
+    html += `<tr>
+      <td>${escHtml(r.contractName)}</td>
+      <td class="td-mono">${r.isoCode}</td>
+      <td class="td-mono" style="font-size:11px;color:var(--text-muted)">${escHtml(r.productUniqueId || '—')}</td>
+      <td class="td-mono">${sym}${r.price.toFixed(2)}</td>
+      <td class="td-mono text-green">$${usdAmt.toLocaleString()}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>
+
+    <div class="alert alert-info mt-16"><span>ℹ</span><div>The downloaded CSV contains all ${state.csvTemplate ? state.csvTemplate.length.toLocaleString() : '8,317'} rows from the template. Only the rows matching custom-priced checks will have a value in the <strong>amount</strong> column. All other rows remain blank.</div></div>
+
+    <div class="nav-row">
+      ${backBtn(5)}
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="downloadFinalCsv()">⬇ Download CSV</button>
+    </div>
+  </div>`;
+  setMain(html);
+}
+
+function downloadFinalCsv() {
+  if (!state.csvTemplate) {
+    alert('CSV template not loaded. Please go back to the pricelist setup and upload the template.');
+    return;
+  }
+  const customResults = state.results.filter(r => r.status === 'custom');
+  const customMap = {};
+  customResults.forEach(r => {
+    if (r.productUniqueId) {
+      const usdAmt = Math.round(r.price / state.forexRate);
+      customMap[r.productUniqueId] = usdAmt;
+    }
+  });
+
+  const rows = state.csvTemplate.map(row => {
+    const amount = customMap[row.product_unique_id] !== undefined ? customMap[row.product_unique_id] : '';
+    if (amount !== '' && customMap[row.product_unique_id] === undefined) {
+      console.warn(`Template row not matched: ${row.product_unique_id}`);
+    }
+    return [row.product_class, row.product_specific, row.product_country, row.product_unique_id, amount];
+  });
+
+  const headers = ['product_class','product_specific','product_country','product_unique_id','amount'];
+  const safeClient = state.clientName ? state.clientName.replace(/[^a-z0-9_\-\. ]/gi, '').trim().replace(/\s+/g, '_') : 'client';
+  downloadCsvData([headers, ...rows], `${safeClient}_custom_pricing.csv`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI HELPER
+// ═══════════════════════════════════════════════════════════
+async function callAI(messages, maxTokens = 2000) {
+  const resp = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': ANTHROPIC_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages })
+  });
+
+  if (resp.status === 401 || resp.status === 403) {
+    throw new Error('API request failed. Please check that this tool is using a valid API key.');
+  }
+  if (resp.status === 429) {
+    throw new Error('Rate limit reached. Please wait a moment and try again.');
+  }
+  if (!resp.ok) {
+    throw new Error(`API error ${resp.status}: ${resp.statusText}`);
+  }
+
+  const data = await resp.json();
+  return data.content?.[0]?.text || '';
+}
+
+function parseJsonFromAI(text) {
+  try { return JSON.parse(text.trim()); } catch(e) {}
+  // Try to extract a JSON object {…}
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) { try { return JSON.parse(objMatch[0]); } catch(e) {} }
+  // Try to extract a JSON array […]
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (arrMatch) { try { return JSON.parse(arrMatch[0]); } catch(e) {} }
+  return null;
+}
+
+function extractRowsFromText(text) {
+  // Fallback: extract individual row objects from potentially truncated JSON
+  // Matches each {"contractName":...} object individually
+  const matches = [];
+  const re = /\{\s*"contractName"\s*:\s*"([^"]*)"\s*,\s*"contractCountry"\s*:\s*"([^"]*)"\s*,\s*"price"\s*:\s*(null|-?\d+(?:\.\d+)?)\s*,\s*"isNA"\s*:\s*(true|false)\s*\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    try { matches.push(JSON.parse(m[0])); } catch(e) {}
+  }
+  return matches.length > 0 ? matches : null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CSV DOWNLOAD HELPER
+// ═══════════════════════════════════════════════════════════
+function downloadCsvData(rows, filename) {
+  const csv = rows.map(r => r.map(cell => {
+    const s = String(cell === null || cell === undefined ? '' : cell);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#2ecc71;color:#0d2e1a;padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;z-index:999;animation:fadein 0.2s';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
+function cleanExtractedPrice(val) {
+  if (val === null || val === undefined) return null;
+  // If already a clean number, return it
+  if (typeof val === 'number' && isFinite(val)) return val;
+  // Convert to string and strip: superscript unicode (¹²³⁴⁵⁶⁷⁸⁹⁰), commas, currency symbols, whitespace
+  let s = String(val)
+    .replace(/[¹²³⁴⁵⁶⁷⁸⁹⁰]/g, '')   // unicode superscripts
+    .replace(/[-ª-¹»-¿]/g, '') // other latin supplement chars
+    .replace(/[,$£€₱\s]/g, '');       // currency symbols and spaces
+  const n = parseFloat(s);
+  return isFinite(n) ? n : null;
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+(function init() {
+  // Try to load cached pricelist and CSV template
+  const cached = loadPricelist();
+  if (cached) {
+    state.pricelist = cached.data;
+    state.pricelistMeta = cached.meta;
+  }
+  try {
+    const csvData = localStorage.getItem('vrmk_csv_template');
+    const csvMeta = localStorage.getItem('vrmk_csv_template_meta');
+    if (csvData && csvMeta) {
+      state.csvTemplate = JSON.parse(csvData);
+      state.csvTemplateMeta = JSON.parse(csvMeta);
+    }
+  } catch(e) {}
+
+  updateTopbarInfo();
+  renderStepIndicator();
+  renderPreStep();
+})();
+</script>
+</body>
+</html>
